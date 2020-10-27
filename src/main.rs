@@ -4,6 +4,8 @@ use std::{io::BufReader, fs::File, path::Path};
 mod dat;
 use dat::DatReader;
 
+mod error;
+
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Nico Hormazábal")]
 struct Opts {
@@ -29,7 +31,10 @@ fn main() {
         SubCommand::LoadDat(f) => {
             println!("File to load: {}", f.file);
             let mut dat_reader: DatReader<BufReader<File>> = DatReader::<BufReader<File>>::from_path(Path::new(&f.file));
-            dat_reader.load_dat();
+            match dat_reader.load_dat() {
+                Ok(_) => println!("Parsing complete"),
+                Err(e) => println!("Error parsing file: {:?}", e)
+            }
         }
     }
 }
