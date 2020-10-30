@@ -1,8 +1,9 @@
+mod dat;
+use dat::dat_reader::DatReader;
+use dat::data_writer::DataWriter;
+
 use clap::Clap;
 use std::{io::BufReader, fs::File, path::Path};
-
-mod dat;
-use dat::DatReader;
 
 mod error;
 
