@@ -9,6 +9,8 @@ use env_logger::{Builder, Env, Target};
 use log::{info, error};
 use std::{io::BufReader, fs::File, path::Path};
 
+const DB_EXTENSION: &str = "rst";
+
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Nico Hormazábal")]
 struct Opts {
@@ -25,6 +27,8 @@ enum SubCommand {
 struct LoadDat {
     #[clap(short, long)]
     file: String,
+    #[clap(short, long)]
+    output: Option<String>
 }
 
 fn main() {
@@ -36,8 +40,20 @@ fn main() {
 
     match opts.subcmd {
         SubCommand::LoadDat(f) => {
+            let file_output = match f.output {
+                Some(ref f) => {
+                    Path::new(f).to_path_buf()
+                }
+                None => {
+                    let file = Path::new(&f.file).with_extension(DB_EXTENSION);
+                    file
+                }
+            };
+
             println!("File to load: {}", f.file);
-            let db_writer = DBWriter::new(DBMode::File(String::from("test.db"))).unwrap();
+            println!("Output File: {}", file_output.to_str().unwrap_or_else(|| { "n/a" } ));
+
+            let db_writer = DBWriter::new(DBMode::File(file_output)).unwrap();
             match db_writer.init() {
                 Ok(_) => {},
                 Err(e) => { error!("Error initializing the database: {}", e) }

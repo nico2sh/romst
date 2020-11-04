@@ -6,10 +6,13 @@ pub struct Game {
     pub clone_of: Option<String>,
     pub rom_of: Option<String>,
     pub source_file: Option<String>,
+    pub info_description: Option<String>,
+    pub info_year: Option<String>,
+    pub info_manufacturer: Option<String>,
 }
 
 impl Game {
-    pub fn new(name: String) -> Self { Self { name, clone_of: None, rom_of: None, source_file: None } }
+    pub fn new(name: String) -> Self { Self { name, clone_of: None, rom_of: None, source_file: None, info_description: None, info_year: None, info_manufacturer: None } }
 }
 
 impl fmt::Display for Game {

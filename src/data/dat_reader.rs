@@ -1,6 +1,6 @@
 
-use std::{fs::File, fs, io::{BufRead, BufReader}, path::Path, sync::mpsc, str, thread};
-use log::{debug, error, info, warn};
+use std::{fs::File, fs, io::{BufRead, BufReader}, path::Path, str};
+use log::{debug, error, info};
 use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
 use crate::{reporter::DatReaderReporter, data::writer::*, err, error::RomstError};
@@ -15,8 +15,6 @@ pub struct DatReader<T: BufRead, W: DataWriter> {
 
 impl<T: BufRead, W: DataWriter> DatReader<T, W> {
     pub fn from_path(path: &Path, writer: W) -> DatReader<BufReader<File>, W> {
-        let (sender, receiver) = mpsc::channel::<u64>();
-
         let file_size = fs::metadata(path).unwrap().len();
         let reporter = DatReaderReporter::new(file_size);
         DatReader {
@@ -86,7 +84,7 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
             match self.reader_mut().read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     match e.name() {
-                        b"machine" | b"game" => self.read_rom_entry( String::from_utf8(e.name().to_vec())?, e.attributes())?,
+                        b"machine" | b"game" => self.read_game_entry( String::from_utf8(e.name().to_vec())?, e.attributes())?,
                         b"header" => self.read_header()?,
                         tag_name => self.consume_tag(String::from_utf8(tag_name.to_vec())?)?,
                     }
@@ -199,9 +197,8 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
         Ok(())
     }
 
-    fn read_rom_entry(&mut self, entry_type: String, attributes: Attributes) -> Result<()> {
-        let game = game_from_attributes(attributes)?;
-        self.writer.on_new_game(&game)?;
+    fn read_game_entry(&mut self, entry_type: String, attributes: Attributes) -> Result<()> {
+        let mut game = game_from_attributes(attributes)?;
 
         let mut roms = vec![];
         let mut samples = vec![];
@@ -214,12 +211,15 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
                     match e.name() {
                         b"description" => {
                             let desc = self.get_text()?;
+                            game.info_description = Some(desc);
                         },
                         b"year" => {
                             let year = self.get_text()?;
+                            game.info_year = Some(year);
                         },
                         b"manufacturer" => {
                             let manuf = self.get_text()?;
+                            game.info_manufacturer = Some(manuf);
                         },
                         n => self.consume_tag(String::from_utf8(n.to_vec())?)?
                     }
@@ -256,6 +256,7 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
             buf.clear();
         }
 
+        self.writer.on_new_game(&game)?;
         self.writer.on_new_roms(&game, &roms)?;
         self.repot_new_entry();
 
