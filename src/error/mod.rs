@@ -17,6 +17,11 @@ pub enum RomstError {
         position: usize
     },
 
+    #[error("Parsing error: {message}")]
+    ParsingError {
+        message: String
+    },
+
     #[error("Unexpected End of File")]
     UnexpectedEOF
 }
