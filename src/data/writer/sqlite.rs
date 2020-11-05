@@ -1,13 +1,14 @@
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 
 use anyhow::Result;
-use log::{debug, error, warn};
+use log::{debug, error};
 use rusqlite::{Connection, OpenFlags, ToSql, params};
 
 use crate::{data::models::{file::DataFile, game::Game}};
 
 use super::DataWriter;
 
+#[derive(Debug)]
 pub enum DBMode {
     Memory,
     File(PathBuf),
