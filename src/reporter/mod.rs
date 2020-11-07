@@ -1,4 +1,4 @@
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[derive(Debug)]
 pub struct DatReaderReporter {
@@ -27,3 +27,37 @@ impl DatReaderReporter {
     }
 }
 
+#[derive(Debug)]
+pub struct SysOutWriterReporter {
+    game_pb: ProgressBar,
+    rom_pb: ProgressBar,
+}
+
+impl SysOutWriterReporter {
+    pub fn new() -> Self {
+        let spinner_style = ProgressStyle::default_spinner()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
+            .template("{prefix:.bold.dim} {spinner} {wide_msg}");
+
+        let multi_progress = MultiProgress::new();
+        let game = multi_progress.add(ProgressBar::new_spinner());
+        // game.set_style(spinner_style.clone());
+        game.set_prefix("[Game]");
+        let rom = multi_progress.add(ProgressBar::new_spinner());
+        // rom.set_style(spinner_style.clone());
+        rom.set_prefix("[ROM]");
+
+
+        Self { game_pb: game, rom_pb: rom } 
+    }
+
+    pub fn current_game(&mut self, game: &str) {
+        self.game_pb.set_message(&game);
+        self.game_pb.inc(1);
+    }
+
+    pub fn current_rom(&mut self, rom: &str) {
+        self.rom_pb.set_message(&rom);
+        self.rom_pb.inc(1);
+    }
+}

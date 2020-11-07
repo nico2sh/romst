@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum FileType {
     Rom,
     Disk,
@@ -17,7 +17,7 @@ impl fmt::Display for FileType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct DataFile {
     pub file_type: FileType,
     pub name: Option<String>,

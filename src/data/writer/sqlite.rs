@@ -1,12 +1,13 @@
-use std::path::{PathBuf};
+use std::{collections::HashMap, path::{PathBuf}};
 
 use anyhow::Result;
 use log::{debug, error};
 use rusqlite::{Connection, OpenFlags, ToSql, params};
 
 use crate::{data::models::{file::DataFile, game::Game}};
-
 use super::DataWriter;
+
+const BUFFER_SIZE: u32 = 500;
 
 #[derive(Debug)]
 pub enum DBMode {
@@ -15,9 +16,21 @@ pub enum DBMode {
 }
 
 #[derive(Debug)]
+pub struct IdsCounter {
+    pub game: u32,
+    pub rom: u32
+}
+
+impl IdsCounter {
+    pub fn new() -> Self { Self { game: 0, rom: 0 } }
+}
+
+
+#[derive(Debug)]
 pub struct DBWriter {
     conn: Connection,
-    rom_row_id: u32,
+    ids: IdsCounter,
+    game_buffer: HashMap<String, (Game, u32)>,
 }
 
 impl DBWriter {
@@ -27,19 +40,11 @@ impl DBWriter {
             DBMode::File(p) => Connection::open_with_flags(p, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?
         };
 
-        Ok(Self { conn: connection, rom_row_id: 0 })
+        Ok(Self { conn: connection, ids: IdsCounter::new(), game_buffer: HashMap::new() })
     }
 
-    fn conn(&self) -> &Connection {
-        &self.conn
-    }
-    
-    fn conn_mut(&mut self) -> &mut Connection {
-        &mut self.conn
-    }
-    
     fn create_schema(&self) -> Result<()> {
-        self.conn().execute(
+        self.conn.execute(
             "CREATE TABLE info (
                 name        TEXT,
                 description TEXT,
@@ -48,7 +53,7 @@ impl DBWriter {
 
         debug!("Creating ROMS table");
         // Rom
-        self.conn().execute(
+        self.conn.execute(
             "CREATE TABLE roms (
                 id      INTEGER PRIMARY KEY,
                 sha1    TEXT,
@@ -59,14 +64,14 @@ impl DBWriter {
             params![])?;
         debug!("Creating ROMS indexes");
         // Indexes
-        self.conn().execute( "CREATE INDEX sha1 ON roms(sha1);", params![])?;
-        self.conn().execute( "CREATE INDEX md5 ON roms(md5);", params![])?;
-        self.conn().execute( "CREATE INDEX crc ON roms(crc);", params![])?;
-        self.conn().execute( "CREATE INDEX checks ON roms(sha1, md5, crc);", params![])?;
+        self.conn.execute( "CREATE INDEX sha1 ON roms(sha1);", params![])?;
+        self.conn.execute( "CREATE INDEX md5 ON roms(md5);", params![])?;
+        self.conn.execute( "CREATE INDEX crc ON roms(crc);", params![])?;
+        self.conn.execute( "CREATE INDEX checks ON roms(sha1, md5, crc);", params![])?;
 
         debug!("Creating Games table");
         // Machines/Games
-        self.conn().execute(
+        self.conn.execute(
             "CREATE TABLE games (
                 id          INTEGER PRIMARY KEY,
                 name        TEXT NOT NULL ON CONFLICT FAIL,
@@ -79,11 +84,11 @@ impl DBWriter {
             params![])?;
         debug!("Creating Games indexes");
         // Indexes
-        self.conn().execute( "CREATE INDEX name ON games(name);", params![])?;
+        self.conn.execute( "CREATE INDEX name ON games(name);", params![])?;
 
         debug!("Creating Games/ROMs table");
         // Machine/Roms
-        self.conn().execute(
+        self.conn.execute(
             "CREATE TABLE game_roms (
                 game_id     INTEGER,
                 rom_id      INTEGER,
@@ -92,13 +97,13 @@ impl DBWriter {
             params![])?;
         debug!("Creating Games/ROMs indexes");
         // Indexes
-        self.conn().execute( "CREATE INDEX game ON game_roms(game_id);", params![])?;
-        self.conn().execute( "CREATE INDEX rom ON game_roms(rom_id);", params![])?;
+        self.conn.execute( "CREATE INDEX game ON game_roms(game_id);", params![])?;
+        self.conn.execute( "CREATE INDEX rom ON game_roms(rom_id);", params![])?;
 
         Ok(())
     }
 
-    fn get_rom_ids(&mut self, roms: &[DataFile]) -> Result<Vec<(u32, String)>> {
+    fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<(u32, String)>> {
         let mut rom_name_pair: Vec<(u32, String)> = vec![];
         let mut roms_to_insert = vec![];
 
@@ -134,7 +139,7 @@ impl DBWriter {
 
                     let statement = "SELECT id FROM roms WHERE ".to_string() + &statement_where.join(" AND ") + ";";
 
-                    let mut rom_stmt = self.conn().prepare_cached(&statement)?;
+                    let mut rom_stmt = self.conn.prepare_cached(&statement)?;
                     let rom_result: rusqlite::Result<u32> = rom_stmt.query_row(params, |row| {
                         Ok(row.get(0)?)
                     });
@@ -161,8 +166,8 @@ impl DBWriter {
             }
         }
 
-        let mut rom_row_id = self.rom_row_id;
-        let tx = self.conn_mut().transaction()?;
+        let mut rom_row_id = self.ids.rom;
+        let tx = self.conn.transaction()?;
 
         for rom in roms_to_insert {
             tx.execute(
@@ -175,11 +180,61 @@ impl DBWriter {
                 })?;
         }
         match tx.commit() {
-            Ok(_) => { self.rom_row_id = rom_row_id }
+            Ok(_) => { self.ids.rom = rom_row_id }
             Err(e) => { error!("Error inserting roms: {}", e) }
         }
 
         Ok(rom_name_pair)
+    }
+
+    fn add_game_to_buffer(&mut self, game: Game) {
+        let game_name = game.name.to_owned();
+        self.game_buffer.insert(game_name, (game, self.ids.game)); 
+        self.ids.game = self.ids.game + 1;
+    }
+
+    fn get_game_id(&self, game_name: &str) -> Result<u32> {
+        match self.game_buffer.get(game_name) {
+            Some(pair) => { Ok(pair.1) }
+            None => { 
+                let mut game_stmt = self.conn.prepare("SELECT id, name FROM games WHERE name = ?1;")?;
+
+                let id: u32 = game_stmt.query_row(params![ game_name ], |row| {
+                    Ok(row.get(0)?)
+                })?;
+
+                Ok(id)
+            }
+        }
+
+    }
+
+    fn write_game_buffer(&mut self) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        let buffer = &self.game_buffer;
+        let values = buffer.values();
+        for value in values {
+            let game = &value.0;
+            let id = &value.1;
+            let p = params![id,
+                game.name,
+                game.clone_of,
+                game.rom_of,
+                game.source_file,
+                game.info_description,
+                game.info_year,
+                game.info_manufacturer];
+            match tx.execute("INSERT INTO games (id, name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
+                p) {
+                    Ok(_) => {}
+                    Err(e) => { error!("Error inserting row in the games db: {}", e) }
+                }
+        }
+
+        tx.commit()?;
+        self.game_buffer.clear();
+
+        Ok(())
     }
 }
 
@@ -188,32 +243,23 @@ impl DataWriter for DBWriter {
         self.create_schema()
     }
     
-    fn on_new_game(&self, game: &Game) -> Result<()> {
-        let result = self.conn().execute(
-            "INSERT INTO games (name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);",
-            params![game.name, game.clone_of, game.rom_of, game.source_file, game.info_description, game.info_year, game.info_manufacturer]);
+    fn on_new_game(&mut self, game: Game) -> Result<()> {
+        self.add_game_to_buffer(game);
 
-        match result {
-            Ok(n) => { debug!("Inserted {} rows, game {}", n, game) }
-            Err(e) => { error!("Error inserting row: {} for game {}", e, game) }
+        if self.game_buffer.len() as u32 >= BUFFER_SIZE {
+            self.write_game_buffer()?;
         }
 
         Ok(())
     } 
 
-    fn on_new_roms(&mut self, game: &Game, roms: &[DataFile]) -> Result<()> {
-        let game_id: u32 = {
-            let mut game_stmt = self.conn().prepare("SELECT id, name FROM games WHERE name = ?1;")?;
-
-            game_stmt.query_row(params![ game.name ], |row| {
-                Ok(row.get(0)?)
-            })?
-        };
+    fn on_new_roms(&mut self, game: Game, roms: Vec<DataFile>) -> Result<()> {
+        let game_id: u32 = self.get_game_id(&game.name)?;
 
         let rom_list = self.get_rom_ids(roms);
         match rom_list {
             Ok(rom_id_names) => {
-                let tx = self.conn_mut().transaction()?;
+                let tx = self.conn.transaction()?;
                 for rom_id_name in rom_id_names {
                     let result = tx.execute(
                         "INSERT INTO game_roms (game_id, rom_id, name) VALUES (?1, ?2, ?3);",
@@ -231,4 +277,7 @@ impl DataWriter for DBWriter {
         Ok(())
     }
 
+    fn finish(&mut self) -> Result<()>{
+        self.write_game_buffer()
+    }
 }

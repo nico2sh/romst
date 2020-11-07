@@ -20,7 +20,7 @@ struct Opts {
 
 #[derive(Clap)]
 enum SubCommand {
-    LoadDat(LoadDat),
+    Import(LoadDat),
 }
 
 #[derive(Clap)]
@@ -39,7 +39,7 @@ fn main() {
     let opts: Opts = Opts::parse();
 
     match opts.subcmd {
-        SubCommand::LoadDat(f) => {
+        SubCommand::Import(f) => {
             let file_output = match f.output {
                 Some(ref f) => {
                     Path::new(f).to_path_buf()
@@ -58,9 +58,9 @@ fn main() {
                 Ok(_) => {},
                 Err(e) => { error!("Error initializing the database: {}", e) }
             }
-
-            // let mut dat_reader: DatReader<BufReader<File>, SysOutWriter> = DatReader::<BufReader<File>, SysOutWriter>::from_path(Path::new(&f.file), SysOutWriter::new());
             let mut dat_reader: DatReader<BufReader<File>, DBWriter> = DatReader::<BufReader<File>, DBWriter>::from_path(Path::new(&f.file), db_writer);
+
+            //let mut dat_reader: DatReader<BufReader<File>, SysOutWriter> = DatReader::<BufReader<File>, SysOutWriter>::from_path(Path::new(&f.file), SysOutWriter::new());
             match dat_reader.load_dat() {
                 Ok(_) => info!("Parsing complete"),
                 Err(e) => error!("Error parsing file: {:?}", e)

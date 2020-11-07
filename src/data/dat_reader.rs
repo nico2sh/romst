@@ -66,6 +66,7 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
                     self.read_datafile()?;
                 }
                 Event::Eof => {
+                    self.writer.finish()?;
                     self.reporter().finish();
                     break
                 }, 
@@ -256,8 +257,8 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
             buf.clear();
         }
 
-        self.writer.on_new_game(&game)?;
-        self.writer.on_new_roms(&game, &roms)?;
+        self.writer.on_new_game(game.clone())?;
+        self.writer.on_new_roms(game, roms)?;
         self.repot_new_entry();
 
         Ok(())
