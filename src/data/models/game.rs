@@ -19,15 +19,15 @@ impl fmt::Display for Game {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut game_data = vec![];
         match self.clone_of {
-            Some(ref clone_of) => game_data.push(format!("sha1: {}", clone_of)),
+            Some(ref clone_of) => game_data.push(format!("Clone of: {}", clone_of)),
             _ => (),
         }
         match self.rom_of {
-            Some(ref rom_of) => game_data.push(format!("md5: {}", rom_of)),
+            Some(ref rom_of) => game_data.push(format!("ROM of: {}", rom_of)),
             _ => (),
         }
         match self.source_file {
-            Some(ref source_file) => game_data.push(format!("crc: {}", source_file)),
+            Some(ref source_file) => game_data.push(format!("Source File: {}", source_file)),
             _ => (),
         }
 

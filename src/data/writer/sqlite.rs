@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::{PathBuf}};
+use std::{collections::HashMap, path::{Path, PathBuf}};
 
 use anyhow::Result;
 use log::{debug, error};
@@ -7,7 +7,6 @@ use rusqlite::{Connection, OpenFlags, ToSql, params};
 use crate::{data::models::{file::DataFile, game::Game}};
 use super::DataWriter;
 
-const BUFFER_SIZE: u32 = 500;
 
 #[derive(Debug)]
 pub enum DBMode {
@@ -31,16 +30,18 @@ pub struct DBWriter {
     conn: Connection,
     ids: IdsCounter,
     game_buffer: HashMap<String, (Game, u32)>,
+    buffer_size: u16,
 }
 
 impl DBWriter {
-    pub fn new(mode: DBMode) -> Result<Self> {
-        let connection = match mode {
-            DBMode::Memory => Connection::open_in_memory()?,
-            DBMode::File(p) => Connection::open_with_flags(p, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?
-        };
+    pub fn new(db_file: &Path, buffer_size: u16) -> Result<Self> {
+        let conn = Connection::open_with_flags(db_file, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
 
-        Ok(Self { conn: connection, ids: IdsCounter::new(), game_buffer: HashMap::new() })
+        Ok(DBWriter::from_connection(conn, buffer_size))
+    }
+
+    pub fn from_connection(conn: Connection, buffer_size: u16) -> Self {
+        Self { conn, ids: IdsCounter::new(), game_buffer: HashMap::new(), buffer_size }
     }
 
     fn create_schema(&self) -> Result<()> {
@@ -85,6 +86,7 @@ impl DBWriter {
         debug!("Creating Games indexes");
         // Indexes
         self.conn.execute( "CREATE INDEX name ON games(name);", params![])?;
+        self.conn.execute( "CREATE INDEX parents ON games(clone_of);", params![])?;
 
         debug!("Creating Games/ROMs table");
         // Machine/Roms
@@ -144,24 +146,15 @@ impl DBWriter {
                         Ok(row.get(0)?)
                     });
 
-                    let r_id = match rom_result {
+                    match rom_result {
                         Err(rusqlite::Error::QueryReturnedNoRows) => {
                             roms_to_insert.push(rom);
-                            Ok(None)
                         },
-                        Ok(id) => Ok(Some(id)),
-                        Err(e) => Err(e),
+                        Ok(id) => {
+                            rom_name_pair.push((id, rom_name));
+                        },
+                        Err(e) => error!("Error adding a rom: {}", e),
                     };
-
-                    match r_id {
-                        Ok(o_id) => {
-                            match o_id {
-                                Some(id) => { rom_name_pair.push((id, rom_name)); }
-                                None => {}
-                            }
-                        }
-                        Err(e) => { error!("Error adding a rom: {}", e) }
-                    }
                 }
             }
         }
@@ -184,6 +177,9 @@ impl DBWriter {
             Err(e) => { error!("Error inserting roms: {}", e) }
         }
 
+        // We remove the duplicates
+        rom_name_pair.sort();
+        rom_name_pair.dedup();
         Ok(rom_name_pair)
     }
 
@@ -246,7 +242,7 @@ impl DataWriter for DBWriter {
     fn on_new_game(&mut self, game: Game) -> Result<()> {
         self.add_game_to_buffer(game);
 
-        if self.game_buffer.len() as u32 >= BUFFER_SIZE {
+        if self.game_buffer.len() as u16 >= self.buffer_size {
             self.write_game_buffer()?;
         }
 

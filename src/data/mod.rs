@@ -1,4 +1,5 @@
 pub mod models;
 
-pub mod dat_reader;
+pub mod dat;
 pub mod writer;
+pub mod reader;

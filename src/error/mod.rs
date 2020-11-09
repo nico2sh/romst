@@ -23,5 +23,8 @@ pub enum RomstError {
     },
 
     #[error("Unexpected End of File")]
-    UnexpectedEOF
+    UnexpectedEOF,
+
+    #[error("Wrong argument")]
+    WrongArgument,
 }

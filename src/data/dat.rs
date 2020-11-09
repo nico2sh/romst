@@ -3,32 +3,32 @@ use std::{fs::File, fs, io::{BufRead, BufReader}, path::Path, str};
 use log::{debug, error, info};
 use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
-use crate::{reporter::DatReaderReporter, data::writer::*, err, error::RomstError};
+use crate::{reporter::DatImporterReporter, data::writer::*, err, error::RomstError};
 
 use super::models::{game::Game, file::DataFile, file::FileType};
 
-pub struct DatReader<T: BufRead, W: DataWriter> {
+pub struct DatImporter<T: BufRead, W: DataWriter> {
     reader: Reader<T>,
     writer: W,
-    reporter: DatReaderReporter,
+    reporter: DatImporterReporter,
 }
 
-impl<T: BufRead, W: DataWriter> DatReader<T, W> {
-    pub fn from_path(path: &Path, writer: W) -> DatReader<BufReader<File>, W> {
+impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
+    pub fn from_path(path: &Path, writer: W) -> DatImporter<BufReader<File>, W> {
         let file_size = fs::metadata(path).unwrap().len();
-        let reporter = DatReaderReporter::new(file_size);
-        DatReader {
+        let reporter = DatImporterReporter::new(file_size);
+        DatImporter {
             reader: Reader::from_file(path).unwrap(),
             writer,
             reporter,
         }
     }
 
-    pub fn from_string(xml: &str, writer: W) -> DatReader<&[u8], W> {
+    pub fn from_string(xml: &str, writer: W) -> DatImporter<&[u8], W> {
         let file_size = xml.len();
-        let reporter = DatReaderReporter::new(file_size as u64);
+        let reporter = DatImporterReporter::new(file_size as u64);
 
-        DatReader {
+        DatImporter {
             reader: Reader::from_str(xml),
             writer,
             reporter,
@@ -43,7 +43,7 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
         &mut self.reader
     }
 
-    fn reporter(&self) -> &DatReaderReporter {
+    fn reporter(&self) -> &DatImporterReporter {
         &self.reporter
     }
 
@@ -64,7 +64,11 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
             match self.reader_mut().read_event(&mut buf)? {
                 Event::Start(ref e) if (e.name() == b"datafile") => {
                     self.read_datafile()?;
-                }
+                },
+                Event::Start(ref e) if (e.name() == b"mame") => {
+                    self.read_mame_header(e.attributes());
+                    self.read_datafile()?;
+                },
                 Event::Eof => {
                     self.writer.finish()?;
                     self.reporter().finish();
@@ -86,7 +90,7 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
                 Event::Start(ref e) => {
                     match e.name() {
                         b"machine" | b"game" => self.read_game_entry( String::from_utf8(e.name().to_vec())?, e.attributes())?,
-                        b"header" => self.read_header()?,
+                        b"header" => self.read_dat_header()?,
                         tag_name => self.consume_tag(String::from_utf8(tag_name.to_vec())?)?,
                     }
                 },
@@ -157,7 +161,27 @@ impl<T: BufRead, W: DataWriter> DatReader<T, W> {
         }
     }
 
-    fn read_header(&mut self) -> Result<()> {
+    fn read_mame_header(&mut self, attributes: Attributes) {
+        process_attributes(attributes, |key, value| {
+            match key {
+                "build" => {
+                    let build = String::from(value);
+                    info!("Build: {}", build);
+                },
+                "debug" => {
+                    let debug = String::from(value);
+                    info!("Debug: {}", debug);
+                },
+                "mameconfig" => {
+                    let mameconfig = String::from(value);
+                    info!("Mameconfig: {}", mameconfig);
+                },
+                k => debug!("Unknown atribute parsing: {}", k),
+            }
+        });
+    }
+
+    fn read_dat_header(&mut self) -> Result<()> {
         let mut buf = Vec::new();
         loop {
             match self.reader_mut().read_event(&mut buf)? {

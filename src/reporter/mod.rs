@@ -1,12 +1,12 @@
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[derive(Debug)]
-pub struct DatReaderReporter {
+pub struct DatImporterReporter {
     progress_bar: ProgressBar,
     entries: usize,
 }
 
-impl DatReaderReporter {
+impl DatImporterReporter {
     pub fn new(total_bytes: u64) -> Self { 
         let progress_bar = ProgressBar::new(total_bytes);
         progress_bar.set_style(ProgressStyle::default_bar()
