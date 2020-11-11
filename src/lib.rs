@@ -2,12 +2,13 @@ mod macros;
 mod data;
 mod reporter;
 mod error;
+mod filesystem;
 
 use console::Style;
 use data::{dat::DatImporter, models::set::GameSet, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use std::{fs::File, io::BufReader, str::FromStr, path::{Path}};
+use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, str::FromStr};
 use anyhow::{Result, anyhow};
 
 pub const DEFAULT_WRITE_BUFFER_SIZE: u16 = 1000;
@@ -90,10 +91,20 @@ impl Romst {
         let mut games =  vec![];
         let reader = Romst::get_data_reader(db_file)?;
         for game_name in game_names {
-            let roms = reader.get_gameset_roms(&game_name, &rom_mode)?;
+            let roms = reader.get_romset_roms(&game_name, &rom_mode)?;
             games.push(GameSet::new(reader.get_game(&game_name)?, roms, vec![], vec![]));
         }
 
         Ok(games)
+    }
+
+    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String) -> Result<HashMap<String, Vec<String>>> {
+        let reader = Romst::get_data_reader(db_file)?;
+        reader.find_rom_usage(&game_name, &rom_name)
+    }
+
+    pub fn get_romset_usage(db_file: String, game_name: String) -> Result<HashMap<String, Vec<String>>> {
+        let reader = Romst::get_data_reader(db_file)?;
+        reader.get_romset_shared_roms(&game_name)
     }
 }

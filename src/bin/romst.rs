@@ -15,8 +15,12 @@ struct Opts {
 
 #[derive(Clap)]
 enum SubCommand {
+    #[clap(about = "Import a DAT file into the database")]
     Import(LoadDat),
-    Info(GetInfo)
+    #[clap(about = "Prints information from a romset")]
+    SetInfo(SetInfo),
+    #[clap(about = "Shows which sets a Rom is used")]
+    RomUsage(RomUsage),
 }
 
 #[derive(Clap)]
@@ -28,13 +32,23 @@ struct LoadDat {
 }
 
 #[derive(Clap)]
-struct GetInfo {
-    #[clap(short, long, about="Path to the ROMST database")]
+struct SetInfo {
+    #[clap(short, long, about = "The ROMST database to use. You can create one with the import command.")]
     db: String,
-    #[clap(short, long, about="A list of games to retrieve the information from")]
+    #[clap(short, long, about = "A list of games to retrieve the information from")]
     game: Vec<String>,
-    #[clap(short, long, about="Sets the romset mode, can be either `merge`, `non-merged` or `split`")]
+    #[clap(short, long, about = "Sets the romset mode, can be either `merge`, `non-merged` or `split`")]
     set_mode: RomsetMode,
+}
+
+#[derive(Clap)]
+struct RomUsage {
+    #[clap(short, long, about = "The ROMST database to use. You can create one with the import command.")]
+    db: String,
+    #[clap(short, long, about = "The game to get the rom to search.")]
+    game: String,
+    #[clap(short, long, about = "The romname to search, if empty, Romst will list all the roms present in the romset.")]
+    rom: Option<String>,
 }
 
 fn main() {
@@ -57,7 +71,7 @@ fn main() {
                 }
             }
         }
-        SubCommand::Info(i) => {
+        SubCommand::SetInfo(i) => {
             let db_file = i.db;
             let game_name = i.game;
             let mode = i.set_mode;
@@ -68,6 +82,33 @@ fn main() {
                     }
                 }
                 Err(e) => { println!("{} getting game info.\n{}",
+                    Style::new().red().apply_to("ERROR"),
+                    e); }
+            }
+        },
+        SubCommand::RomUsage(ru) => {
+            let db_file = ru.db;
+            let game_name = ru.game;
+            let rom_name = ru.rom;
+            let execution = match rom_name {
+                Some(rom) => {
+                    Romst::get_rom_usage(db_file, game_name, rom)
+                }
+                None => { 
+                    Romst::get_romset_usage(db_file, game_name)
+                 }
+            };
+
+            match execution {
+                Ok(result) => {
+                    for entry in result.into_iter() {
+                        println!("{}", Style::new().green().apply_to(entry.0));
+                        for rom in entry.1.into_iter() {
+                            println!("    - {}", rom);
+                        }
+                    }
+                }
+                Err(e) => { println!("{} getting roms info.\n{}",
                     Style::new().red().apply_to("ERROR"),
                     e); }
             }

@@ -3,7 +3,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 #[derive(Debug)]
 pub struct DatImporterReporter {
     progress_bar: ProgressBar,
-    entries: usize,
+    entries: u32,
 }
 
 impl DatImporterReporter {
@@ -15,14 +15,15 @@ impl DatImporterReporter {
         Self { progress_bar, entries: 0 }
     }
 
-    pub fn update_position(&mut self, bytes: u64) {
-        self.entries = self.entries + 1;
+    pub fn update_position(&mut self, bytes: u64, new_entries: u32) {
+        self.entries = self.entries + new_entries;
 
         self.progress_bar.set_position(bytes);
         self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
     }
 
     pub fn finish(&self) {
+        self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
         self.progress_bar.finish_with_message(&format!("Total Entries #{}", self.entries));
     }
 }

@@ -16,12 +16,11 @@ pub enum DBMode {
 
 #[derive(Debug)]
 pub struct IdsCounter {
-    pub game: u32,
-    pub rom: u32
+    pub rom: u32,
 }
 
 impl IdsCounter {
-    pub fn new() -> Self { Self { game: 0, rom: 0 } }
+    pub fn new() -> Self { Self { rom: 0 } }
 }
 
 
@@ -29,7 +28,7 @@ impl IdsCounter {
 pub struct DBWriter {
     conn: Connection,
     ids: IdsCounter,
-    game_buffer: HashMap<String, (Game, u32)>,
+    game_buffer: HashMap<String, Game>,
     buffer_size: u16,
 }
 
@@ -74,8 +73,7 @@ impl DBWriter {
         // Machines/Games
         self.conn.execute(
             "CREATE TABLE games (
-                id          INTEGER PRIMARY KEY,
-                name        TEXT NOT NULL ON CONFLICT FAIL,
+                name        TEXT PRIMARY KEY,
                 clone_of    TEXT,
                 rom_of      TEXT,
                 source_file TEXT,
@@ -85,21 +83,21 @@ impl DBWriter {
             params![])?;
         debug!("Creating Games indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX name ON games(name);", params![])?;
         self.conn.execute( "CREATE INDEX parents ON games(clone_of);", params![])?;
 
         debug!("Creating Games/ROMs table");
         // Machine/Roms
         self.conn.execute(
             "CREATE TABLE game_roms (
-                game_id     INTEGER,
+                game_name   TEXT,
                 rom_id      INTEGER,
                 name        TEXT,
-                PRIMARY KEY (game_id, rom_id, name));",
+                in_parent   INTEGER,
+                PRIMARY KEY (game_name, rom_id, name));",
             params![])?;
         debug!("Creating Games/ROMs indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX game ON game_roms(game_id);", params![])?;
+        self.conn.execute( "CREATE INDEX game ON game_roms(game_name);", params![])?;
         self.conn.execute( "CREATE INDEX rom ON game_roms(rom_id);", params![])?;
 
         Ok(())
@@ -185,24 +183,7 @@ impl DBWriter {
 
     fn add_game_to_buffer(&mut self, game: Game) {
         let game_name = game.name.to_owned();
-        self.game_buffer.insert(game_name, (game, self.ids.game)); 
-        self.ids.game = self.ids.game + 1;
-    }
-
-    fn get_game_id(&self, game_name: &str) -> Result<u32> {
-        match self.game_buffer.get(game_name) {
-            Some(pair) => { Ok(pair.1) }
-            None => { 
-                let mut game_stmt = self.conn.prepare("SELECT id, name FROM games WHERE name = ?1;")?;
-
-                let id: u32 = game_stmt.query_row(params![ game_name ], |row| {
-                    Ok(row.get(0)?)
-                })?;
-
-                Ok(id)
-            }
-        }
-
+        self.game_buffer.insert(game_name, game); 
     }
 
     fn write_game_buffer(&mut self) -> Result<()> {
@@ -210,17 +191,16 @@ impl DBWriter {
         let buffer = &self.game_buffer;
         let values = buffer.values();
         for value in values {
-            let game = &value.0;
-            let id = &value.1;
-            let p = params![id,
-                game.name,
+            let game = value;
+            let p = params![game.name,
                 game.clone_of,
                 game.rom_of,
                 game.source_file,
                 game.info_description,
                 game.info_year,
                 game.info_manufacturer];
-            match tx.execute("INSERT INTO games (id, name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
+            match tx.execute("INSERT INTO games (name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);",
                 p) {
                     Ok(_) => {}
                     Err(e) => { error!("Error inserting row in the games db: {}", e) }
@@ -250,16 +230,14 @@ impl DataWriter for DBWriter {
     } 
 
     fn on_new_roms(&mut self, game: Game, roms: Vec<DataFile>) -> Result<()> {
-        let game_id: u32 = self.get_game_id(&game.name)?;
-
         let rom_list = self.get_rom_ids(roms);
         match rom_list {
             Ok(rom_id_names) => {
                 let tx = self.conn.transaction()?;
                 for rom_id_name in rom_id_names {
                     let result = tx.execute(
-                        "INSERT INTO game_roms (game_id, rom_id, name) VALUES (?1, ?2, ?3);",
-                        params![ game_id, rom_id_name.0, rom_id_name.1 ] );
+                        "INSERT INTO game_roms (game_name, rom_id, name) VALUES (?1, ?2, ?3);",
+                        params![ game.name, rom_id_name.0, rom_id_name.1 ] );
                     match result {
                         Ok(_n) => { debug!("Inserted a rom to a game") }
                         Err(e) => { error!("Error adding rom `{}` to the game {}: {}", rom_id_name.1, "", e) }

@@ -16,3 +16,6 @@ thiserror = "1.0"
 clap = "3.0.0-beta.2"
 quick-xml = "0.20.0"
 rusqlite = { version = "0.24.1", features = [ "bundled" ] }
+zip = "0.5"
+sha-1 = "0.9"
+md-5 = "0.9"
