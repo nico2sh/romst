@@ -43,10 +43,6 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
         &mut self.reader
     }
 
-    fn reporter(&self) -> &DatImporterReporter {
-        &self.reporter
-    }
-
     fn repot_new_entry(&mut self, new_entries: u32) {
         let buf_pos = self.buf_pos() as u64;
         self.reporter.update_position(buf_pos, new_entries);
@@ -70,8 +66,9 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
                     self.read_datafile()?;
                 },
                 Event::Eof => {
+                    self.reporter.start_finish();
                     self.writer.finish()?;
-                    self.reporter().finish();
+                    self.reporter.finish();
                     break
                 }, 
                 _ => (),

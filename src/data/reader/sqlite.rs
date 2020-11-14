@@ -23,10 +23,9 @@ impl DBReader {
     }
 
     fn get_merged_set_roms(&self, game_name: &String) -> Result<Vec<DataFile>> {
-        let mut roms_stmt = self.conn.prepare("SELECT game_roms.name, roms.sha1, roms.md5, roms.crc, roms.size, roms.status
-            FROM games JOIN game_roms ON
-            games.name = game_roms.game_name
-            JOIN roms ON roms.id = game_roms.rom_id WHERE (games.clone_of = ?1 OR games.name = ?1);")?;
+        let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.name, roms.sha1, roms.md5, roms.crc, roms.size, roms.status
+            FROM game_roms 
+            JOIN roms ON roms.id = game_roms.rom_id WHERE (game_roms.game_name = ?1 OR game_roms.parent = ?1);")?;
         let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
             Ok(DataFile {
                 file_type: Rom,
@@ -62,6 +61,26 @@ impl DBReader {
 
         Ok(Vec::from_iter(roms_rows))
     }
+
+    fn get_split_set_roms(&self, game_name: &String) -> Result<Vec<DataFile>> {
+        let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.name, roms.sha1, roms.md5, roms.crc, roms.size, roms.status
+            FROM game_roms 
+            JOIN roms ON roms.id = game_roms.rom_id WHERE (game_roms.game_name = ?1 AND game_roms.parent IS NULL);")?;
+        let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
+            Ok(DataFile {
+                file_type: Rom,
+                name: row.get(0)?,
+                sha1: row.get(1)?,
+                md5: row.get(2)?,
+                crc: row.get(3)?,
+                size: row.get(4)?,
+                status: row.get(5)?,
+            })
+        })?.filter_map(|row| row.ok());
+
+        let roms: HashSet<DataFile> = Vec::from_iter(roms_rows).drain(..).collect();
+        Ok(Vec::from_iter(roms))
+    }
 }
 
 impl DataReader for DBReader {
@@ -88,37 +107,13 @@ impl DataReader for DBReader {
     fn get_romset_roms(&self, game_name: &String, rom_mode: &RomsetMode) -> Result<Vec<DataFile>> {
         let result = match rom_mode {
             RomsetMode::NonMerged => {
-                self.get_nonmerged_set_roms(game_name)
+                self.get_nonmerged_set_roms(&game_name)
             },
             RomsetMode::Merged => {
-                let game = self.get_game(game_name)?;
-                match game.clone_of {
-                    Some(_) => {
-                        Ok(vec![])
-                    },
-                    None => {
-                        self.get_merged_set_roms(&game_name)
-                    }
-                }
+                self.get_merged_set_roms(&game_name)
             },
             RomsetMode::Split => {
-                let game = self.get_game(game_name)?;
-                let roms = self.get_nonmerged_set_roms(game_name)?;
-                match game.clone_of {
-                    Some(parent) => {
-                        let parent_roms = self.get_romset_roms(&parent, &RomsetMode::NonMerged)?;
-                        let result = roms.into_iter().filter(|rom| {
-                            !parent_roms.iter().position(|pr| {
-                                let a = pr.eq(rom);
-                                a
-                            }).is_some()
-                        });
-                        Ok(Vec::from_iter(result))
-                    },
-                    None => {
-                        Ok(roms)
-                    }
-                }
+                self.get_split_set_roms(&game_name)
             }
         };
 

@@ -22,6 +22,10 @@ impl DatImporterReporter {
         self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
     }
 
+    pub fn start_finish(&self) {
+        self.progress_bar.set_message(&format!("Finishing..."));
+    }
+
     pub fn finish(&self) {
         self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
         self.progress_bar.finish_with_message(&format!("Total Entries #{}", self.entries));

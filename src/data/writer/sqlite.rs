@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::{Path, PathBuf}};
+use std::{iter::FromIterator, collections::HashMap, path::Path};
 
 use anyhow::Result;
 use log::{debug, error};
@@ -6,13 +6,6 @@ use rusqlite::{Connection, OpenFlags, ToSql, params};
 
 use crate::{data::models::{file::DataFile, game::Game}};
 use super::DataWriter;
-
-
-#[derive(Debug)]
-pub enum DBMode {
-    Memory,
-    File(PathBuf),
-}
 
 #[derive(Debug)]
 pub struct IdsCounter {
@@ -92,13 +85,14 @@ impl DBWriter {
                 game_name   TEXT,
                 rom_id      INTEGER,
                 name        TEXT,
-                in_parent   INTEGER,
+                parent      TEXT,
                 PRIMARY KEY (game_name, rom_id, name));",
             params![])?;
         debug!("Creating Games/ROMs indexes");
         // Indexes
         self.conn.execute( "CREATE INDEX game ON game_roms(game_name);", params![])?;
         self.conn.execute( "CREATE INDEX rom ON game_roms(rom_id);", params![])?;
+        self.conn.execute( "CREATE INDEX rom_parents ON game_roms(parent);", params![])?;
 
         Ok(())
     }
@@ -212,6 +206,17 @@ impl DBWriter {
 
         Ok(())
     }
+
+    fn get_roms_from_parents(&mut self) -> Result<Vec<(String, u32, String)>>{
+        let mut stmt = self.conn.prepare("SELECT games.name AS game_name, game_roms.rom_id, game_roms.game_name as parent, game_roms.name FROM game_roms
+            JOIN games ON games.clone_of = game_roms.game_name
+            WHERE games.clone_of IS NOT NULL;")?;
+        let rows = stmt.query_map(params![], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?.filter_map(|row| row.ok());
+
+        Ok(Vec::from_iter(rows))
+    }
 }
 
 impl DataWriter for DBWriter {
@@ -251,7 +256,23 @@ impl DataWriter for DBWriter {
         Ok(())
     }
 
-    fn finish(&mut self) -> Result<()>{
-        self.write_game_buffer()
+    fn finish(&mut self) -> Result<()> {
+        let roms_from_parents = self.get_roms_from_parents()?;
+
+        let tx = self.conn.transaction()?;
+        for item in roms_from_parents {
+            let game_name = item.0;
+            let rom_id = item.1;
+            let parent = item.2;
+
+            let result = tx.execute("UPDATE game_roms SET parent = ?1
+                WHERE game_roms.game_name = ?2 AND game_roms.rom_id = ?3;", params![parent, game_name, rom_id])?;
+            if result > 1 {
+                debug!("Updated {} rows, should be only 1 for game {}, rom_id {}, with parent {}, unless is a 'nodump'", result, game_name, rom_id, parent);
+            }
+        }
+        tx.commit()?;
+
+        Ok(())
     }
 }
