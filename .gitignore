@@ -1,5 +1,5 @@
 /target
-*.rst
-*.dat
-*.xml
-*.db
+/*.rst
+/*.dat
+/*.xml
+/*.db

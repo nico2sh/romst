@@ -1,0 +1,59 @@
+CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">
+
+<datafile>
+	<header>
+		<name>MAME</name>
+		<description>MAME Mock</description>
+		<category>Emulation</category>
+		<version>0.1</version>
+		<date>28/10/2020</date>
+		<author>Nico</author>
+		<email>mail@example.com</email>
+		<homepage>http://www.example.com/</homepage>
+		<url>http://www.example.com/dats/MAME/</url>
+		<comment>-</comment>
+		<clrmamepro/>
+	</header>
+	<machine name="screen" sourcefile="src/emu/screen.cpp" isdevice="yes" runnable="no">
+		<description>Video Screen</description>
+	</machine>
+	<machine name="deviceref" sourcefile="src/mame/machine/ref.cpp" isdevice="yes" runnable="no">
+		<description>Device Ref No Rom</description>
+	</machine>
+	<machine name="device1" sourcefile="src/mame/machine/device1.cpp" isdevice="yes" runnable="no">
+		<description>Device Ref 1</description>
+		<rom name="devrom1.bin" size="8192" crc="a342a97e" sha1="2c420d34dba21e409bf78ddca710fc7de65a6642"/>
+		<device_ref name="deviceref"/>
+	</machine>
+	<machine name="game1" sourcefile="gamelib.cpp">
+		<description>Game 1</description>
+		<year>1999</year>
+		<manufacturer>Acme</manufacturer>
+		<rom name="rom1.trom" size="2048" crc="1d460eee" sha1="8bb3a81b9fa2de5163f0ffc634a998c455bcca25"/>
+		<rom name="rom2.trom" size="2048" crc="b4069ce5" sha1="bea1c74957e8f659d51fbac19ed8d2418a741927"/>
+		<rom name="rom3.trom" size="2048" crc="c284e56d" sha1="2dda409cbca971007a9089ba0e7c9cd37533c58c"/>
+		<rom name="binfil1.bin" size="65536" crc="1b736d41" sha1="8273bfebe84dd41a5d237add8f9d03ac9bb0ef54"/>
+		<device_ref name="device1"/>
+		<device_ref name="screen"/>
+		<sample name="sample1"/>
+		<sample name="sample2"/>
+		<driver status="imperfect"/>
+	</machine>
+	<machine name="game1a" sourcefile="gamelib.cpp" cloneof="game1" romof="game1">
+		<description>Game 1</description>
+		<year>1999</year>
+		<manufacturer>Acme</manufacturer>
+		<rom name="rom1.trom" merge="rom1.trom" size="2048" crc="1d460eee" sha1="8bb3a81b9fa2de5163f0ffc634a998c455bcca25"/>
+		<rom name="rom2.trom" merge="rom2.trom" size="2048" crc="b4069ce5" sha1="bea1c74957e8f659d51fbac19ed8d2418a741927"/>
+		<rom name="rom3.trom" merge="rom3.trom" size="2048" crc="c284e56d" sha1="2dda409cbca971007a9089ba0e7c9cd37533c58c"/>
+		<rom name="rom4.trom" size="2048" crc="c6b7767e" sha1="dbb660bbff3c7e37fd0397ccbac593c0f71da6d4"/>
+		<rom name="rom5.trom" size="2048" crc="e858301d" sha1="6ed0fbb1f75c9ec60b0c6400e85e496fba8b4f7a"/>
+		<rom name="binfil1.bin" size="65536" crc="1b736d41" sha1="8273bfebe84dd41a5d237add8f9d03ac9bb0ef54"/>
+		<device_ref name="device1"/>
+		<device_ref name="screen"/>
+		<sample name="sample1"/>
+		<sample name="sample2"/>
+		<driver status="imperfect"/>
+	</machine>
+</datafile>
+
