@@ -13,6 +13,7 @@ indicatif = "0.15.0"
 console = "0.13.0"
 anyhow = "1.0"
 thiserror = "1.0"
+bitflags = "1.2"
 clap = "3.0.0-beta.2"
 quick-xml = "0.20.0"
 rusqlite = { version = "0.24.1", features = [ "bundled" ] }

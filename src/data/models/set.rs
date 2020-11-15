@@ -3,10 +3,10 @@ use std::fmt::Display;
 use super::{file::DataFile, game::Game};
 
 pub struct GameSet {
-    game: Game,
-    roms: Vec<DataFile>,
-    samples: Vec<DataFile>,
-    disks: Vec<DataFile>,
+    pub game: Game,
+    pub roms: Vec<DataFile>,
+    pub samples: Vec<DataFile>,
+    pub disks: Vec<DataFile>,
 }
 
 impl GameSet {
