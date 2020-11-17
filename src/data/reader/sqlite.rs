@@ -3,7 +3,7 @@ use std::{collections::HashSet, iter::FromIterator, collections::HashMap, path::
 use anyhow::Result;
 use rusqlite::{Connection, OpenFlags, params};
 
-use crate::{RomsetMode, data::models::{file::{DataFile, FileType::Rom}, game::Game, set::GameSet}};
+use crate::{RomsetMode, data::models::{file::{DataFile, FileType::Rom}, game::Game, set::GameSet, report::Report}};
 
 use super::DataReader;
 
@@ -120,44 +120,62 @@ impl DataReader for DBReader {
         result
     }
 
-    fn find_rom_usage(&self, game_name: &String, rom_name: &String) -> Result<HashMap<String, Vec<String>>> {
-        let mut roms_stmt = self.conn.prepare("SELECT game_roms.game_name, game_roms.name as romname
+    fn find_rom_usage(&self, game_name: &String, rom_name: &String) -> Result<Vec<Report>> {
+        let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.game_name, game_roms.name as romname
             FROM game_roms 
                 WHERE game_roms.rom_id = (SELECT game_roms.rom_id FROM game_roms 
-                WHERE game_roms.game_name = ?1 AND game_roms.name = ?2);
+                WHERE game_roms.game_name = ?1 AND game_roms.name = ?2) ORDER BY game_roms.game_name;
         ")?;
         let roms_rows = roms_stmt.query_map(params![ game_name, rom_name ], |row| {
             Ok((row.get(0)?,
                 row.get(1)?))
         })?.filter_map(|row| row.ok());
 
-        let mut result: HashMap<String, Vec<String>> = HashMap::new();
-        for item in roms_rows {
-            let game_roms = result.entry(item.0).or_insert_with(|| {
-                vec![]
-            });
-            game_roms.push(item.1);
+        let mut rows = roms_rows.peekable();
+        let mut result: Vec<Report> = vec![];
+        if let Some(row) = rows.peek() {
+            let mut report = Report::new(String::from(&row.0), vec![], vec![]);
+            for item in rows {
+                let game_name = item.0;
+                let rom_name = item.1;
+
+                if report.name != game_name {
+                    result.push(report);
+                    report = Report::new(game_name, vec![ rom_name ], vec![]);
+                } else {
+                    report.add_having(rom_name);
+                }
+            }
         }
 
         Ok(result)
     }
 
-    fn get_romset_shared_roms(&self, game_name: &String) -> Result<HashMap<String, Vec<String>>> {
-        let mut roms_stmt = self.conn.prepare("SELECT game_roms.game_name, game_roms.name as romname
+    fn get_romset_shared_roms(&self, game_name: &String) -> Result<Vec<Report>> {
+        let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.game_name, game_roms.name as romname
             FROM game_roms WHERE game_roms.rom_id IN (SELECT game_roms.rom_id FROM game_roms 
-                WHERE game_roms.game_name = ?1);
+                WHERE game_roms.game_name = ?1) ORDER BY game_roms.game_name;
         ")?;
         let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
             Ok((row.get(0)?,
                 row.get(1)?))
         })?.filter_map(|row| row.ok());
 
-        let mut result: HashMap<String, Vec<String>> = HashMap::new();
-        for item in roms_rows {
-            let game_roms = result.entry(item.0).or_insert_with(|| {
-                vec![]
-            });
-            game_roms.push(item.1);
+        let mut rows = roms_rows.peekable();
+        let mut result: Vec<Report> = vec![];
+        if let Some(row) = rows.peek() {
+            let mut report = Report::new(String::from(&row.0), vec![], vec![]);
+            for item in rows {
+                let game_name = item.0;
+                let rom_name = item.1;
+
+                if report.name != game_name {
+                    result.push(report);
+                    report = Report::new(game_name, vec![ rom_name ], vec![]);
+                } else {
+                    report.add_having(rom_name);
+                }
+            }
         }
 
         Ok(result)

@@ -5,7 +5,7 @@ mod error;
 mod filesystem;
 
 use console::Style;
-use data::{dat::DatImporter, models::set::GameSet, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
+use data::{dat::DatImporter, models::{set::GameSet, report::Report}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
 use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, str::FromStr};
@@ -98,12 +98,12 @@ impl Romst {
         Ok(games)
     }
 
-    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String) -> Result<HashMap<String, Vec<String>>> {
+    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String) -> Result<Vec<Report>> {
         let reader = Romst::get_data_reader(db_file)?;
         reader.find_rom_usage(&game_name, &rom_name)
     }
 
-    pub fn get_romset_usage(db_file: String, game_name: String) -> Result<HashMap<String, Vec<String>>> {
+    pub fn get_romset_usage(db_file: String, game_name: String) -> Result<Vec<Report>> {
         let reader = Romst::get_data_reader(db_file)?;
         reader.get_romset_shared_roms(&game_name)
     }

@@ -102,8 +102,8 @@ fn main() {
             match execution {
                 Ok(result) => {
                     for entry in result.into_iter() {
-                        println!("{}", Style::new().green().apply_to(entry.0));
-                        for rom in entry.1.into_iter() {
+                        println!("{}", Style::new().green().apply_to(entry.name));
+                        for rom in entry.roms_have.into_iter() {
                             println!("    - {}", rom);
                         }
                     }
