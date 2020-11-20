@@ -13,6 +13,10 @@ impl Report {
     pub fn add_having(&mut self, rom: String) {
         self.roms_have.push(rom);
     }
+
+    pub fn add_missing(&mut self, rom: String) {
+        self.roms_missing.push(rom);
+    }
 }
 
 
