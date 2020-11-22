@@ -1,6 +1,11 @@
 use std::{cmp::Ordering, fmt::{self, Display}};
 use std::cmp::Ord;
 
+use filesystem::FileChecks;
+use anyhow::Result;
+
+use crate::{error::RomstError, err, filesystem};
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum FileType {
     Rom,
@@ -107,6 +112,70 @@ impl PartialOrd for DataFile {
 
 impl DataFile {
     pub fn new(file_type: FileType) -> Self { Self { file_type, name: None, sha1: None, md5: None, crc: None, size: None, status: None } }
+
+    /// Compares two files with the requested info, if the info is not available in either file, the comparation is ignored
+    fn deep_compare(&self, other: &Self, file_checks: FileChecks, include_name: bool) -> Result<bool> {
+        let mut compared = false;
+        let mut result = if include_name {
+            match (self.name.as_ref(), other.name.as_ref()) {
+                (Some(self_name), Some(other_name)) => {
+                    self_name.eq(other_name)
+                },
+                (None, None) => true ,
+                _ => false
+            }
+        } else {
+            true
+        };
+        
+        if file_checks.contains(FileChecks::SHA1) {
+            result = result && match (self.sha1.as_ref(), other.sha1.as_ref()) {
+                (Some(self_sha1), Some(other_sha1)) => {
+                    compared = true;
+                    self_sha1.eq(other_sha1)
+                },
+                _ => { true }
+            };
+        }
+
+        if file_checks.contains(FileChecks::MD5) {
+            result = result && match (self.md5.as_ref(), other.md5.as_ref()) {
+                (Some(self_md5), Some(other_md5)) => {
+                    compared = true;
+                    self_md5.eq(other_md5)
+                },
+                _ => { true }
+            }
+        }
+
+        if file_checks.contains(FileChecks::CRC) {
+            result = result && match (self.crc.as_ref(), other.crc.as_ref()) {
+                (Some(self_crc), Some(other_crc)) => {
+                    compared = true;
+                    self_crc.eq(other_crc)
+                },
+                _ => { true }
+            }
+        }
+
+        if file_checks.contains(FileChecks::SIZE) {
+            result = result && match (self.size.as_ref(), other.size.as_ref()) {
+                (Some(self_size), Some(other_size)) => {
+                    compared = true;
+                    self_size.eq(other_size)
+                },
+                _ => { true }
+            }
+        }
+
+        if compared {
+            Ok(result)
+        } else {
+            err!(RomstError::GenericError {
+                message: format!("Can't compare, not enough info:\n{}\n{}", self, other)
+            })
+        }
+    }
 }
 
 impl Display for DataFile {

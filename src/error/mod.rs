@@ -27,4 +27,10 @@ pub enum RomstError {
 
     #[error("Wrong argument")]
     WrongArgument,
+
+    #[error("ERROR: {message}")]
+    GenericError {
+        message: String
+    },
+
 }
