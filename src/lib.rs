@@ -5,10 +5,10 @@ mod error;
 mod filesystem;
 
 use console::Style;
-use data::{dat::DatImporter, models::{set::GameSet, report::Report}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
+use data::{importer::DatImporter, models::{set::GameSet, report::Report}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, str::FromStr};
+use std::{fs::File, io::BufReader, path::{Path}, str::FromStr};
 use anyhow::{Result, anyhow};
 
 pub const DEFAULT_WRITE_BUFFER_SIZE: u16 = 1000;
@@ -45,21 +45,19 @@ impl Romst {
 
     fn get_r_connection(db_file: String) -> Result<Connection>{
         let db_path = Path::new(&db_file);
+        if !db_path.exists() {
+            return Err(anyhow!("No Database found at `{}`", db_file));
+        }
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         Ok(conn)
     }
 
-    pub fn get_data_reader(db_file: String) -> Result<DBReader> {
-        let db_path = Path::new(&db_file);
-        if !db_path.exists() {
-            return Err(anyhow!("No Database found at `{}`", db_file));
-        }
-
-        Ok(DBReader::from_connection(Romst::get_r_connection(db_file)?))
+    pub fn get_data_reader(conn: &Connection) -> Result<DBReader> {
+        Ok(DBReader::from_connection(conn))
     }
 
-    pub fn get_data_writer(db_file: String) -> Result<DBWriter> {
-        Ok(DBWriter::from_connection(Romst::get_rw_connection(db_file)?, 500))
+    pub fn get_data_writer(conn: &mut Connection) -> Result<DBWriter> {
+        Ok(DBWriter::from_connection(conn, 500))
     }
 
     pub fn import_dat(input: String, output: String) -> Result<()> {
@@ -71,7 +69,8 @@ impl Romst {
             return Err(anyhow!("Destination file `{}` already exists, choose another output or rename the file.", output));
         }
 
-        let db_writer = DBWriter::new(db_path, DEFAULT_WRITE_BUFFER_SIZE)?;
+        let mut conn = Romst::get_rw_connection(output)?;
+        let db_writer = DBWriter::from_connection(&mut conn, DEFAULT_WRITE_BUFFER_SIZE);
         match db_writer.init() {
             Ok(_) => {},
             Err(e) => { error!("Error initializing the database: {}", e) }
@@ -89,7 +88,8 @@ impl Romst {
 
     pub fn get_set_info(db_file: String, game_names: Vec<String>, rom_mode: RomsetMode) -> Result<Vec<GameSet>> {
         let mut games =  vec![];
-        let reader = Romst::get_data_reader(db_file)?;
+        let conn = Romst::get_r_connection(db_file)?;
+        let reader = Romst::get_data_reader(&conn)?;
         for game_name in game_names {
             let roms = reader.get_romset_roms(&game_name, &rom_mode)?;
             games.push(GameSet::new(reader.get_game(&game_name)?, roms, vec![], vec![]));
@@ -99,12 +99,14 @@ impl Romst {
     }
 
     pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String) -> Result<Vec<Report>> {
-        let reader = Romst::get_data_reader(db_file)?;
+        let conn = Romst::get_r_connection(db_file)?;
+        let reader = Romst::get_data_reader(&conn)?;
         reader.find_rom_usage(&game_name, &rom_name)
     }
 
     pub fn get_romset_usage(db_file: String, game_name: String) -> Result<Vec<Report>> {
-        let reader = Romst::get_data_reader(db_file)?;
+        let conn = Romst::get_r_connection(db_file)?;
+        let reader = Romst::get_data_reader(&conn)?;
         reader.get_romset_shared_roms(&game_name)
     }
 }

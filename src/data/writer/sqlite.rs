@@ -18,21 +18,15 @@ impl IdsCounter {
 
 
 #[derive(Debug)]
-pub struct DBWriter {
-    conn: Connection,
+pub struct DBWriter<'d> {
+    conn: &'d mut Connection,
     ids: IdsCounter,
     game_buffer: HashMap<String, Game>,
     buffer_size: u16,
 }
 
-impl DBWriter {
-    pub fn new(db_file: &Path, buffer_size: u16) -> Result<Self> {
-        let conn = Connection::open_with_flags(db_file, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
-
-        Ok(DBWriter::from_connection(conn, buffer_size))
-    }
-
-    pub fn from_connection(conn: Connection, buffer_size: u16) -> Self {
+impl <'d> DBWriter<'d> {
+    pub fn from_connection(conn: &'d mut Connection, buffer_size: u16) -> Self {
         Self { conn, ids: IdsCounter::new(), game_buffer: HashMap::new(), buffer_size }
     }
 
@@ -219,7 +213,7 @@ impl DBWriter {
     }
 }
 
-impl DataWriter for DBWriter {
+impl <'d> DataWriter for DBWriter<'d> {
     fn init(&self) -> Result<()> {
         self.create_schema()
     }

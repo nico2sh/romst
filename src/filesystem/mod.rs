@@ -26,7 +26,6 @@ pub struct FileReader {
     md5_hasher: MD5Hasher,
 }
 
-
 impl FileReader {
     pub fn new() -> Self {
         Self { 

@@ -8,17 +8,12 @@ use crate::{RomsetMode, data::models::{file::{DataFile, FileType::Rom}, game::Ga
 use super::DataReader;
 
 #[derive(Debug)]
-pub struct DBReader {
-    conn: Connection,
+pub struct DBReader<'d> {
+    conn: &'d Connection,
 }
 
-impl DBReader {
-    pub fn new(db_file: &Path) -> Result<Self> {
-        let conn = Connection::open_with_flags(db_file, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-        Ok(Self { conn } )
-    }
-
-    pub fn from_connection(conn: Connection) -> Self {
+impl <'d> DBReader <'d>{
+    pub fn from_connection(conn: &'d Connection) -> Self {
         Self { conn }
     }
 
@@ -83,7 +78,7 @@ impl DBReader {
     }
 }
 
-impl DataReader for DBReader {
+impl <'d> DataReader for DBReader<'d> {
     fn get_game(&self, game_name: &String) -> Result<Game> {
         let mut game_stmt = self.conn.prepare("SELECT name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf
             FROM games WHERE name = ?1;")?;
