@@ -4,7 +4,7 @@ mod md5;
 use anyhow::Result;
 use data::models::file::FileType;
 use zip::ZipArchive;
-use std::{io::BufReader, fs::File, path::Path};
+use std::{fs::File, io::BufReader, path::Path};
 use bitflags::bitflags;
 
 use crate::data::{self, models::{file::DataFile, game::Game, set::GameSet}};
@@ -34,9 +34,8 @@ impl FileReader {
         } 
     }
 
-    pub fn get_game_set(&mut self, game_file_name: &String, file_checks: FileChecks) -> Result<GameSet> {
-        let file_path = Path::new(game_file_name);
-        let no_path = file_path.with_extension("");
+    pub fn get_game_set(&mut self, file_path: &impl AsRef<Path>, file_checks: FileChecks) -> Result<GameSet> {
+        let no_path = Path::new(file_path.as_ref()).with_extension("");
         let base_file_name = no_path.file_name();
 
         let game_name = match base_file_name {
@@ -101,7 +100,8 @@ mod tests {
     #[test]
     fn gets_zip_info() -> Result<()> {
         let mut file_reader: FileReader = FileReader::new();
-        let game_set = file_reader.get_game_set(&"testdata/split/game1.zip".to_string(), FileChecks::ALL)?;
+        let file_path = Path::new("testdata").join("split").join("game1.zip");
+        let game_set = file_reader.get_game_set(&file_path, FileChecks::ALL)?;
         println!("Game Set: {}", game_set);
 
         assert!(game_set.game.name == "game1");

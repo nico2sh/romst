@@ -251,6 +251,7 @@ impl <'d> DataWriter for DBWriter<'d> {
     }
 
     fn finish(&mut self) -> Result<()> {
+        self.write_game_buffer()?;
         let roms_from_parents = self.get_roms_from_parents()?;
 
         let tx = self.conn.transaction()?;

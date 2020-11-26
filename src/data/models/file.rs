@@ -114,7 +114,7 @@ impl DataFile {
     pub fn new(file_type: FileType) -> Self { Self { file_type, name: None, sha1: None, md5: None, crc: None, size: None, status: None } }
 
     /// Compares two files with the requested info, if the info is not available in either file, the comparation is ignored
-    fn deep_compare(&self, other: &Self, file_checks: FileChecks, include_name: bool) -> Result<bool> {
+    pub fn deep_compare(&self, other: &Self, file_checks: FileChecks, include_name: bool) -> Result<bool> {
         let mut compared = false;
         let mut result = if include_name {
             match (self.name.as_ref(), other.name.as_ref()) {

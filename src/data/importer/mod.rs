@@ -1,9 +1,9 @@
 
-use std::{fs::File, fs, io::{BufRead, BufReader}, path::Path, str};
+use std::{fs::File, path::PathBuf, fs, io::{BufRead, BufReader}, path::Path, str};
 use log::{debug, error, info};
 use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
-use crate::{reporter::DatImporterReporter, data::writer::*, err, error::RomstError};
+use crate::{sysout::DatImporterReporter, data::writer::*, err, error::RomstError};
 
 use super::models::{game::Game, file::DataFile, file::FileType};
 
@@ -14,7 +14,7 @@ pub struct DatImporter<T: BufRead, W: DataWriter> {
 }
 
 impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
-    pub fn from_path(path: &Path, writer: W) -> DatImporter<BufReader<File>, W> {
+    pub fn from_path(path: &impl AsRef<Path>, writer: W) -> DatImporter<BufReader<File>, W> {
         let file_size = fs::metadata(path).unwrap().len();
         let reporter = DatImporterReporter::new(file_size);
         DatImporter {

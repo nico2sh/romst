@@ -76,6 +76,15 @@ impl <'d> DBReader <'d>{
         let roms: HashSet<DataFile> = Vec::from_iter(roms_rows).drain(..).collect();
         Ok(Vec::from_iter(roms))
     }
+
+    pub fn get_stats(&self) -> Result<String> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM games;")?;
+        let result: u32 = stmt.query_row(params![], |row| {
+            Ok(row.get(0)?)
+        })?;
+
+        return Ok(format!("{} games", result))
+    }
 }
 
 impl <'d> DataReader for DBReader<'d> {
@@ -115,7 +124,7 @@ impl <'d> DataReader for DBReader<'d> {
         result
     }
 
-    fn find_rom_usage(&self, game_name: &String, rom_name: &String) -> Result<Vec<Report>> {
+    fn find_rom_usage(&self, game_name: &String, rom_name: &String) -> Result<HashMap<String, Vec<String>>> {
         let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.game_name, game_roms.name as romname
             FROM game_roms 
                 WHERE game_roms.rom_id = (SELECT game_roms.rom_id FROM game_roms 
@@ -127,26 +136,20 @@ impl <'d> DataReader for DBReader<'d> {
         })?.filter_map(|row| row.ok());
 
         let mut rows = roms_rows.peekable();
-        let mut result: Vec<Report> = vec![];
+        let mut result: HashMap<String, Vec<String>> = HashMap::new();
         if let Some(row) = rows.peek() {
-            let mut report = Report::new(String::from(&row.0), vec![], vec![]);
             for item in rows {
                 let game_name = item.0;
                 let rom_name = item.1;
 
-                if report.name != game_name {
-                    result.push(report);
-                    report = Report::new(game_name, vec![ rom_name ], vec![]);
-                } else {
-                    report.add_having(rom_name);
-                }
+                result.entry(game_name).or_insert(vec![]).push(rom_name);
             }
         }
 
         Ok(result)
     }
 
-    fn get_romset_shared_roms(&self, game_name: &String) -> Result<Vec<Report>> {
+    fn get_romset_shared_roms(&self, game_name: &String) -> Result<HashMap<String, Vec<String>>> {
         let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.game_name, game_roms.name as romname
             FROM game_roms WHERE game_roms.rom_id IN (SELECT game_roms.rom_id FROM game_roms 
                 WHERE game_roms.game_name = ?1) ORDER BY game_roms.game_name;
@@ -157,19 +160,14 @@ impl <'d> DataReader for DBReader<'d> {
         })?.filter_map(|row| row.ok());
 
         let mut rows = roms_rows.peekable();
-        let mut result: Vec<Report> = vec![];
+        let mut result: HashMap<String, Vec<String>> = HashMap::new();
         if let Some(row) = rows.peek() {
-            let mut report = Report::new(String::from(&row.0), vec![], vec![]);
+            let mut report = Report::empty(String::from(&row.0));
             for item in rows {
                 let game_name = item.0;
                 let rom_name = item.1;
 
-                if report.name != game_name {
-                    result.push(report);
-                    report = Report::new(game_name, vec![ rom_name ], vec![]);
-                } else {
-                    report.add_having(rom_name);
-                }
+                result.entry(game_name).or_insert(vec![]).push(rom_name);
             }
         }
 

@@ -1,0 +1,3 @@
+game1 is missing a rom
+game2 has a rom that should be renamed
+game3 has an additional rom

@@ -40,7 +40,7 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<driver status="imperfect"/>
 	</machine>
 	<machine name="game1a" sourcefile="gamelib.cpp" cloneof="game1" romof="game1">
-		<description>Game 1</description>
+		<description>Game 1 (version 2)</description>
 		<year>1999</year>
 		<manufacturer>Acme</manufacturer>
 		<rom name="rom1.trom" merge="rom1.trom" size="2048" crc="1d460eee" sha1="8bb3a81b9fa2de5163f0ffc634a998c455bcca25"/>
@@ -54,6 +54,22 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<sample name="sample1"/>
 		<sample name="sample2"/>
 		<driver status="imperfect"/>
+	</machine>
+	<machine name="game2">
+		<description>Game 2</description>
+		<year>1999</year>
+		<manufacturer>Acme</manufacturer>
+		<rom name="binary1.bin" size="4096" crc="4130fc82" sha1="10c6724aaea8d972e1bfd4e914c44bf6cc1573a3"/>
+		<rom name="binary2.bin" size="4096" crc="193cec3c" sha1="6ece14211f80786ab70909581f4cd77be9379a5c"/>
+		<rom name="binary3.bin" size="4096" crc="a1bc3e50" sha1="901fba08a51ec46b3858c4a802b9c96ba826122f"/>
+	</machine>
+	<machine name="game3">
+		<description>Game 3</description>
+		<year>2000</year>
+		<manufacturer>Acme</manufacturer>
+		<rom name="file1.rom" size="2048" crc="80e71f71" SHA1="cc218850743cff0cc46cc1c711176c5bf199c306" />
+		<rom name="file2.rom" size="2048" crc="50321fb2" SHA1="d85488ea520680955ee0b01c40cd1e2abeb6b5e1" />
+		<rom name="file3.rom" size="2048" crc="1794e742" SHA1="77de22e8f83e06bc6b8afd9e255ca92661917195" />
 	</machine>
 </datafile>
 

@@ -1,6 +1,6 @@
 mod macros;
 mod data;
-mod reporter;
+mod sysout;
 mod error;
 mod filesystem;
 
@@ -8,7 +8,7 @@ use console::Style;
 use data::{importer::DatImporter, models::{set::GameSet, report::Report}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use std::{fs::File, io::BufReader, path::{Path}, str::FromStr};
+use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, path::PathBuf, str::FromStr};
 use anyhow::{Result, anyhow};
 
 pub const DEFAULT_WRITE_BUFFER_SIZE: u16 = 1000;
@@ -60,24 +60,23 @@ impl Romst {
         Ok(DBWriter::from_connection(conn, 500))
     }
 
-    pub fn import_dat(input: String, output: String) -> Result<()> {
+    pub fn import_dat(input: String, output_file: String) -> Result<()> {
         println!("Loading file: {}", Style::new().bold().apply_to(&input));
-        println!("Output: {}", Style::new().bold().apply_to(&output));
+        println!("Output: {}", Style::new().bold().apply_to(&output_file));
 
-        let db_path = Path::new(&output);
+        let db_path = Path::new(&output_file);
         if db_path.exists() {
-            return Err(anyhow!("Destination file `{}` already exists, choose another output or rename the file.", output));
+            return Err(anyhow!("Destination file `{}` already exists, choose another output or rename the file.", output_file));
         }
 
-        let mut conn = Romst::get_rw_connection(output)?;
+        let mut conn = Romst::get_rw_connection(output_file)?;
         let db_writer = DBWriter::from_connection(&mut conn, DEFAULT_WRITE_BUFFER_SIZE);
         match db_writer.init() {
             Ok(_) => {},
             Err(e) => { error!("Error initializing the database: {}", e) }
         }
-        let mut dat_reader: DatImporter<BufReader<File>, DBWriter> = DatImporter::<BufReader<File>, DBWriter>::from_path(Path::new(&input), db_writer);
+        let mut dat_reader: DatImporter<BufReader<File>, DBWriter> = DatImporter::<BufReader<File>, DBWriter>::from_path(&input, db_writer);
 
-        //let mut dat_reader: DatReader<BufReader<File>, SysOutWriter> = DatReader::<BufReader<File>, SysOutWriter>::from_path(Path::new(&f.file), SysOutWriter::new());
         match dat_reader.load_dat() {
             Ok(_) => info!("Parsing complete"),
             Err(e) => error!("Error parsing file: {}", e)
@@ -98,13 +97,13 @@ impl Romst {
         Ok(games)
     }
 
-    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String) -> Result<Vec<Report>> {
+    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String) -> Result<HashMap<String, Vec<String>>> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.find_rom_usage(&game_name, &rom_name)
     }
 
-    pub fn get_romset_usage(db_file: String, game_name: String) -> Result<Vec<Report>> {
+    pub fn get_romset_usage(db_file: String, game_name: String) -> Result<HashMap<String, Vec<String>>> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.get_romset_shared_roms(&game_name)

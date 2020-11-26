@@ -1,4 +1,4 @@
-use crate::{reporter::SysOutWriterReporter, data::models::{file::DataFile, game::Game}};
+use crate::{sysout::SysOutWriterReporter, data::models::{file::DataFile, game::Game}};
 use anyhow::Result;
 
 use super::DataWriter;
