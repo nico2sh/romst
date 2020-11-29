@@ -91,7 +91,14 @@ impl Romst {
         let reader = Romst::get_data_reader(&conn)?;
         for game_name in game_names {
             let roms = reader.get_romset_roms(&game_name, &rom_mode)?;
-            games.push(GameSet::new(reader.get_game(&game_name)?, roms, vec![], vec![]));
+            match reader.get_game(&game_name) {
+                Some(game) => {
+                    games.push(GameSet::new(game, roms, vec![], vec![]));
+                }
+                None => {
+                    error!("Game {} not found", game_name)
+                }
+            }
         }
 
         Ok(games)

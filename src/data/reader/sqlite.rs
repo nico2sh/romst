@@ -88,9 +88,9 @@ impl <'d> DBReader <'d>{
 }
 
 impl <'d> DataReader for DBReader<'d> {
-    fn get_game(&self, game_name: &String) -> Result<Game> {
+    fn get_game(&self, game_name: &String) -> Option<Game> {
         let mut game_stmt = self.conn.prepare("SELECT name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf
-            FROM games WHERE name = ?1;")?;
+            FROM games WHERE name = ?1;").ok()?;
         let game: Game = game_stmt.query_row(params![ game_name ], |row| {
             Ok(
                 Game {
@@ -103,9 +103,9 @@ impl <'d> DataReader for DBReader<'d> {
                     info_manufacturer: row.get(6)?
                 }
             )
-        })?;
+        }).ok()?;
 
-        Ok(game)
+        Some(game)
     }
 
     fn get_romset_roms(&self, game_name: &String, rom_mode: &RomsetMode) -> Result<Vec<DataFile>> {

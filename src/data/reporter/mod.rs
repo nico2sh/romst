@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::{RomsetMode, filesystem::{FileReader, FileChecks}};
 
-use super::{models::{report::Report}, reader::DataReader, models::report::FileRename};
+use super::{models::{report::Report}, models::report::FileRename, reader::DataReader, models::set::GameSet};
 use anyhow::Result;
 
 
@@ -17,7 +17,13 @@ impl<R: DataReader> Reporter<R> {
     pub fn check_file(&mut self, file_path: &impl AsRef<Path>, rom_mode: &RomsetMode) -> Result<Report> {
         let game_set = self.file_reader.get_game_set(file_path, FileChecks::ALL)?;
 
-        let game = self.data_reader.get_game(&game_set.game.name)?;
+        self.check_set(game_set, rom_mode)
+    }
+
+
+    pub fn check_set(&mut self, game_set: GameSet, rom_mode: &RomsetMode) -> Result<Report> {
+        // TODO: fix if the game is not found
+        let game = self.data_reader.get_game(&game_set.game.name).unwrap();
         let roms = self.data_reader.get_romset_roms(&game_set.game.name, rom_mode)?;
 
         let mut set_roms = game_set.roms;
