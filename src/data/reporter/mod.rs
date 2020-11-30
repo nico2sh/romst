@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{RomsetMode, filesystem::{FileReader, FileChecks}};
 
@@ -14,23 +14,52 @@ pub struct Reporter<R: DataReader> {
 impl<R: DataReader> Reporter<R> {
     pub fn new(data_reader: R, file_reader: FileReader) -> Self { Self { data_reader, file_reader } }
 
-    pub fn check_file(&mut self, file_path: &impl AsRef<Path>, rom_mode: &RomsetMode) -> Result<Report> {
-        let game_set = self.file_reader.get_game_set(file_path, FileChecks::ALL)?;
+    pub fn check_file(&mut self, file_path: Vec<&impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Vec<Report>> {
+        let game_sets = self.get_sets_from_path(file_path)?;
+        let mut reports = vec![];
 
-        self.check_set(game_set, rom_mode)
+        for game_set in game_sets {
+            // TODO: fix if the game is not found
+            let game = self.data_reader.get_game(&game_set.game.name).unwrap();
+            let roms = self.data_reader.get_romset_roms(&game_set.game.name, rom_mode)?;
+
+            let reference_set = GameSet::new(game, roms, vec![], vec![]);
+
+            reports.push(self.compare_set(game_set, reference_set)?);
+        }
+
+        Ok(reports)
     }
 
+    fn get_sets_from_path(&mut self, file_paths: Vec<impl AsRef<Path>>) -> Result<Vec<GameSet>> {
+        let mut result = vec![];
+        for file_path in file_paths {
+            let path = file_path.as_ref();
+            if path.is_dir() {
+                let contents = path.read_dir()?.into_iter().filter_map(|dir_entry| {
+                    if let Ok(ref entry) = dir_entry {
+                        let path = entry.path();
+                        Some(path)
+                    } else {
+                        None
+                    }
+                }).collect::<Vec<PathBuf>>();
+                let mut more = self.get_sets_from_path(contents)?;
+                result.append(more.as_mut());
+            } else {
+                let game_set = self.file_reader.get_game_set(&file_path, FileChecks::ALL)?;
+                result.push(game_set);
+            }
+        };
 
-    pub fn check_set(&mut self, game_set: GameSet, rom_mode: &RomsetMode) -> Result<Report> {
-        // TODO: fix if the game is not found
-        let game = self.data_reader.get_game(&game_set.game.name).unwrap();
-        let roms = self.data_reader.get_romset_roms(&game_set.game.name, rom_mode)?;
+        Ok(result)
+    }
 
+    pub fn compare_set(&mut self, game_set: GameSet, reference_set: GameSet) -> Result<Report> {
         let mut set_roms = game_set.roms;
+        let mut report = Report::empty(reference_set.game.name);
 
-        let mut report = Report::empty(game.name);
-
-        roms.into_iter().for_each(|rom| {
+        reference_set.roms.into_iter().for_each(|rom| {
             let found_rom = set_roms.iter().position(|set_rom| {
                 rom.deep_compare(&set_rom, FileChecks::ALL, false).ok().unwrap_or_else(|| false)
             });
@@ -81,9 +110,11 @@ mod tests {
         let file_reader = FileReader::new();
         let mut reporter = Reporter::new(data_reader, file_reader);
 
-        let game_path = Path::new("testdata").join("wrong").join("game3.zip");
-        let report = reporter.check_file(&game_path, &RomsetMode::Split)?;
-        println!("{}", report);
+        let game_path = Path::new("testdata").join("wrong");
+        let report = reporter.check_file(vec![&game_path], &RomsetMode::Split)?;
+        for set in report {
+            println!("{}", set);
+        }
         Ok(())
     }
 }
