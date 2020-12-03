@@ -1,4 +1,8 @@
+use std::io;
+
 use thiserror::Error;
+
+use crate::data::models::file::FileType;
 
 #[derive(Error, Debug)]
 pub enum RomstError {
@@ -33,4 +37,19 @@ pub enum RomstError {
         message: String
     },
 
+}
+
+#[derive(Error, Debug)]
+pub enum RomstIOError {
+    #[error("IO Error")]
+    Io {
+        #[from]
+        source: io::Error,
+    },
+
+    #[error("Not a valid file, file {0} is not a {1}")]
+    NotValidFileError(String, FileType),
+
+    #[error("File not found {0}")]
+    FileNotFound(String),
 }

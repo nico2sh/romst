@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use super::{file::DataFile, game::Game};
 
+#[derive(Debug)]
 pub struct GameSet {
     pub game: Game,
     pub roms: Vec<DataFile>,

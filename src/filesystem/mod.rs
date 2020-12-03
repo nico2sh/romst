@@ -3,11 +3,11 @@ mod md5;
 
 use anyhow::Result;
 use data::models::file::FileType;
-use zip::ZipArchive;
+use zip::{ZipArchive, result::ZipError};
 use std::{fs::File, io::BufReader, path::Path};
 use bitflags::bitflags;
 
-use crate::data::{self, models::{file::DataFile, game::Game, set::GameSet}};
+use crate::{data::{self, models::{file::DataFile, game::Game, set::GameSet}}, error::RomstIOError};
 
 use self::{md5::MD5Hasher, sha1::SHA1Hasher};
 
@@ -34,7 +34,7 @@ impl FileReader {
         } 
     }
 
-    pub fn get_game_set(&mut self, file_path: &impl AsRef<Path>, file_checks: FileChecks) -> Result<GameSet> {
+    pub fn get_game_set(&mut self, file_path: &impl AsRef<Path>, file_checks: FileChecks) -> Result<GameSet, RomstIOError> {
         let no_path = Path::new(file_path.as_ref()).with_extension("");
         let base_file_name = no_path.file_name();
 
@@ -63,28 +63,45 @@ impl FileReader {
         let mut roms = vec![];
         let file = File::open(&file_path)?;
         let reader = BufReader::new(file);
-        let mut archive = ZipArchive::new(reader)?;
-        for i in 0..archive.len() {
-            let mut f = archive.by_index(i)?;
-            let mut writer = vec![];
-            std::io::copy(&mut f, &mut writer)?;
 
-            let sha1 =  if use_sha1 { Some(self.sha1_hasher.get_hash(&writer)) } else { None };
-            let md5 =  if use_md5 { Some(self.md5_hasher.get_hash(&writer)) } else { None };
-            let size = if use_size { Some(f.size() as u32) } else { None };
-            let crc = if use_crc { Some(format!("{:x}", f.crc32())) } else { None };
+        match ZipArchive::new(reader) {
+            Ok(mut archive) => {
+                for i in 0..archive.len() {
+                    let mut f = archive.by_index(i).map_err(|err| { RomstIOError::Io{ source: err.into() } })?;
+                    let mut writer = vec![];
+                    std::io::copy(&mut f, &mut writer)?;
 
-            let rom = DataFile {
-                file_type: FileType::Rom,
-                name: Some(f.name().to_string()),
-                sha1,
-                md5,
-                crc,
-                size,
-                status: None,
-            };
-            
-            roms.push(rom);
+                    let sha1 =  if use_sha1 { Some(self.sha1_hasher.get_hash(&writer)) } else { None };
+                    let md5 =  if use_md5 { Some(self.md5_hasher.get_hash(&writer)) } else { None };
+                    let size = if use_size { Some(f.size() as u32) } else { None };
+                    let crc = if use_crc { Some(format!("{:x}", f.crc32())) } else { None };
+
+                    let rom = DataFile {
+                        file_type: FileType::Rom,
+                        name: Some(f.name().to_string()),
+                        sha1,
+                        md5,
+                        crc,
+                        size,
+                        status: None,
+                    };
+                    
+                    roms.push(rom);
+                }
+            },
+            Err(ZipError::InvalidArchive(e)) => {
+                let file_name = file_path.as_ref().to_path_buf().into_os_string().into_string().unwrap_or_else(|ref osstring| {
+                    osstring.to_string_lossy().to_string()
+                });
+                return Err(RomstIOError::NotValidFileError(file_name, FileType::Rom))
+            },
+            Err(ZipError::FileNotFound) => {
+                let file_name = file_path.as_ref().to_path_buf().into_os_string().into_string().unwrap_or_else(|ref osstring| {
+                    osstring.to_string_lossy().to_string()
+                });
+                return Err(RomstIOError::FileNotFound(file_name))
+            },
+            Err(e) => { return Err(RomstIOError::Io{ source: e.into() }) }
         }
 
         let game_set = GameSet::new(game, roms, vec![], vec![]);

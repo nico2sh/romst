@@ -22,7 +22,7 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 	</machine>
 	<machine name="device1" sourcefile="src/mame/machine/device1.cpp" isdevice="yes" runnable="no">
 		<description>Device Ref 1</description>
-		<rom name="devrom1.bin" size="8192" crc="a342a97e" sha1="2c420d34dba21e409bf78ddca710fc7de65a6642"/>
+		<rom name="devrom1.bin" size="8192" crc="dc20b010" sha1="802e076afc412be12db3cb8c79523f65d612a6cf"/>
 		<device_ref name="deviceref"/>
 	</machine>
 	<machine name="game1" sourcefile="gamelib.cpp">

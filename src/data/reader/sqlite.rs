@@ -1,9 +1,10 @@
-use std::{collections::HashSet, iter::FromIterator, collections::HashMap, path::Path};
+use std::{collections::HashSet, iter::FromIterator, collections::HashMap};
 
 use anyhow::Result;
-use rusqlite::{Connection, OpenFlags, params};
+use log::error;
+use rusqlite::{Connection, params};
 
-use crate::{RomsetMode, data::models::{file::{DataFile, FileType::Rom}, game::Game, set::GameSet, report::Report}};
+use crate::{RomsetMode, data::models::{file::{DataFile, FileType::Rom}, game::Game}};
 
 use super::DataReader;
 
@@ -91,7 +92,7 @@ impl <'d> DataReader for DBReader<'d> {
     fn get_game(&self, game_name: &String) -> Option<Game> {
         let mut game_stmt = self.conn.prepare("SELECT name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf
             FROM games WHERE name = ?1;").ok()?;
-        let game: Game = game_stmt.query_row(params![ game_name ], |row| {
+        let game_result= game_stmt.query_row(params![ game_name ], |row| {
             Ok(
                 Game {
                     name: row.get(0)?,
@@ -103,9 +104,20 @@ impl <'d> DataReader for DBReader<'d> {
                     info_manufacturer: row.get(6)?
                 }
             )
-        }).ok()?;
+        });
 
-        Some(game)
+        match game_result {
+            Ok(game) => {
+                Some(game)
+            },
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                None
+            },
+            Err(e) => {
+                error!("Unexpected error reading the roms database: {}", e);
+                None
+            }
+        }
     }
 
     fn get_romset_roms(&self, game_name: &String, rom_mode: &RomsetMode) -> Result<Vec<DataFile>> {
@@ -135,15 +147,12 @@ impl <'d> DataReader for DBReader<'d> {
                 row.get(1)?))
         })?.filter_map(|row| row.ok());
 
-        let mut rows = roms_rows.peekable();
         let mut result: HashMap<String, Vec<String>> = HashMap::new();
-        if let Some(row) = rows.peek() {
-            for item in rows {
-                let game_name = item.0;
-                let rom_name = item.1;
+        for item in roms_rows {
+            let game_name = item.0;
+            let rom_name = item.1;
 
-                result.entry(game_name).or_insert(vec![]).push(rom_name);
-            }
+            result.entry(game_name).or_insert(vec![]).push(rom_name);
         }
 
         Ok(result)
@@ -159,16 +168,12 @@ impl <'d> DataReader for DBReader<'d> {
                 row.get(1)?))
         })?.filter_map(|row| row.ok());
 
-        let mut rows = roms_rows.peekable();
         let mut result: HashMap<String, Vec<String>> = HashMap::new();
-        if let Some(row) = rows.peek() {
-            let mut report = Report::empty(String::from(&row.0));
-            for item in rows {
-                let game_name = item.0;
-                let rom_name = item.1;
+        for item in roms_rows {
+            let game_name = item.0;
+            let rom_name = item.1;
 
-                result.entry(game_name).or_insert(vec![]).push(rom_name);
-            }
+            result.entry(game_name).or_insert(vec![]).push(rom_name);
         }
 
         Ok(result)

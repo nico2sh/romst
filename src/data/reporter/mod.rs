@@ -1,9 +1,14 @@
+mod report;
+
 use std::path::{Path, PathBuf};
 
-use crate::{RomsetMode, filesystem::{FileReader, FileChecks}};
+use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
 
-use super::{models::{report::Report}, models::report::FileRename, reader::DataReader, models::set::GameSet};
+use self::report::{FileRename, Report, SetNameReport, SetReport};
+
+use super::{models::set::GameSet, reader::DataReader};
 use anyhow::Result;
+use log::{error, warn};
 
 
 pub struct Reporter<R: DataReader> {
@@ -14,9 +19,37 @@ pub struct Reporter<R: DataReader> {
 impl<R: DataReader> Reporter<R> {
     pub fn new(data_reader: R, file_reader: FileReader) -> Self { Self { data_reader, file_reader } }
 
-    pub fn check_file(&mut self, file_path: Vec<&impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Vec<Report>> {
-        let game_sets = self.get_sets_from_path(file_path)?;
-        let mut reports = vec![];
+    pub fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Report> {
+        if file_paths.len() == 1 {
+            let path = file_paths.get(0).unwrap().as_ref();
+            if path.is_dir() {
+                return self.check_directory(&path.to_path_buf(), rom_mode)
+            }
+        }
+
+        self.check_files(file_paths, rom_mode)
+    }
+
+    pub fn check_directory(&mut self, file_path: &impl AsRef<Path>, rom_mode: &RomsetMode) -> Result<Report> {
+        let path = file_path.as_ref();
+        if path.is_dir() {
+            let contents = path.read_dir()?.into_iter().filter_map(|dir_entry| {
+                if let Ok(ref entry) = dir_entry {
+                    let path = entry.path();
+                    Some(path)
+                } else {
+                    None
+                }
+            }).collect::<Vec<PathBuf>>();
+            self.check_files(contents, rom_mode)
+        } else {
+            err!("Path is not a directory")
+        }
+    }
+
+    pub fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Report> {
+        let game_sets = self.get_sets_from_path(file_paths)?;
+        let mut report = Report::new();
 
         for game_set in game_sets {
             // TODO: fix if the game is not found
@@ -25,39 +58,31 @@ impl<R: DataReader> Reporter<R> {
 
             let reference_set = GameSet::new(game, roms, vec![], vec![]);
 
-            reports.push(self.compare_set(game_set, reference_set)?);
+            report.add_set(self.compare_set(game_set, reference_set)?);
         }
 
-        Ok(reports)
+        Ok(report)
     }
 
     fn get_sets_from_path(&mut self, file_paths: Vec<impl AsRef<Path>>) -> Result<Vec<GameSet>> {
         let mut result = vec![];
         for file_path in file_paths {
             let path = file_path.as_ref();
-            if path.is_dir() {
-                let contents = path.read_dir()?.into_iter().filter_map(|dir_entry| {
-                    if let Ok(ref entry) = dir_entry {
-                        let path = entry.path();
-                        Some(path)
-                    } else {
-                        None
-                    }
-                }).collect::<Vec<PathBuf>>();
-                let mut more = self.get_sets_from_path(contents)?;
-                result.append(more.as_mut());
-            } else {
-                let game_set = self.file_reader.get_game_set(&file_path, FileChecks::ALL)?;
-                result.push(game_set);
+            if path.is_file() {
+                match self.file_reader.get_game_set(&file_path, FileChecks::ALL) {
+                    Ok(game_set) => { result.push(game_set) },
+                    Err(RomstIOError::NotValidFileError(file_name, _file_type )) => { warn!("File {} is not a valid file", file_name) },
+                    Err(e) => { error!("ERROR: {}", e) }
+                }
             }
         };
 
         Ok(result)
     }
 
-    pub fn compare_set(&mut self, game_set: GameSet, reference_set: GameSet) -> Result<Report> {
+    pub fn compare_set(&mut self, game_set: GameSet, reference_set: GameSet) -> Result<SetReport> {
         let mut set_roms = game_set.roms;
-        let mut report = Report::empty(reference_set.game.name);
+        let mut report = SetReport::new(SetNameReport::new(game_set.game.name, reference_set.game.name));
 
         reference_set.roms.into_iter().for_each(|rom| {
             let found_rom = set_roms.iter().position(|set_rom| {
@@ -72,7 +97,7 @@ impl<R: DataReader> Reporter<R> {
                     if rom_name == set_rom_name {
                         report.roms_have.push(set_rom);
                     } else {
-                        let file_rename = FileRename { from: set_rom, to: rom_name };
+                        let file_rename = FileRename::new(set_rom, rom_name);
                         report.roms_to_rename.push(file_rename);
                     }
                 }
@@ -97,24 +122,29 @@ mod tests {
     use crate::data::{importer::DatImporter, reader::sqlite::DBReader, writer::{sqlite::DBWriter, DataWriter}};
     use super::*;
 
-    #[test]
-    fn get_data_from_file() -> Result<()> {
+    fn get_db_connection<'a, 'b>(dat_path: &'b impl AsRef<Path>) -> Result<Connection> {
         let mut conn = Connection::open_in_memory_with_flags(OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
         let writer = DBWriter::from_connection(&mut conn, 100);
         writer.init().unwrap();
+        let mut importer = DatImporter::<BufReader<File>, DBWriter>::from_path(dat_path, writer);
+        importer.load_dat()?;
+
+        Ok(conn)
+    }
+
+    #[test]
+    fn get_data_from_file() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
-        let mut importer = DatImporter::<BufReader<File>, DBWriter>::from_path(&path, writer);
-        importer.load_dat().unwrap();
+        let conn = get_db_connection(&path)?;
         let data_reader = DBReader::from_connection(&conn);
 
         let file_reader = FileReader::new();
         let mut reporter = Reporter::new(data_reader, file_reader);
 
-        let game_path = Path::new("testdata").join("wrong");
-        let report = reporter.check_file(vec![&game_path], &RomsetMode::Split)?;
-        for set in report {
-            println!("{}", set);
-        }
+        let game_path = Path::new("testdata").join("split");
+        let report = reporter.check(vec![ game_path ], &RomsetMode::Split)?;
+        println!("{}", report);
+
         Ok(())
     }
 }

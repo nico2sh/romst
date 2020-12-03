@@ -1,14 +1,14 @@
-mod macros;
 mod data;
-mod sysout;
 mod error;
 mod filesystem;
+mod macros;
+mod sysout;
 
 use console::Style;
-use data::{importer::DatImporter, models::{set::GameSet, report::Report}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
+use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, path::PathBuf, str::FromStr};
+use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, str::FromStr};
 use anyhow::{Result, anyhow};
 
 pub const DEFAULT_WRITE_BUFFER_SIZE: u16 = 1000;
