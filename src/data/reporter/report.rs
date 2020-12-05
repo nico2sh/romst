@@ -4,21 +4,21 @@ use crate::data::models::file::DataFile;
 
 #[derive(Debug)]
 pub struct Report {
-    sets: Vec<SetReport>,
+    pub files: Vec<FileReport>,
 }
 
 impl Report {
-    pub fn new() -> Self { Self { sets: vec![] } }
+    pub fn new() -> Self { Self { files: vec![] } }
 
-    pub fn add_set(&mut self, set_report: SetReport) {
-        self.sets.push(set_report);
+    pub fn add_set(&mut self, file_report: FileReport) {
+        self.files.push(file_report);
     }
 }
 
 impl Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for set in &self.sets {
-            write!(f, "\n{}\n", set)?;
+        for file in &self.files {
+            write!(f, "\n{}\n", file)?;
         }
 
         Ok(())
@@ -26,15 +26,38 @@ impl Display for Report {
 }
 
 #[derive(Debug)]
+pub enum FileReport {
+    Unneded(String),
+    Set(SetReport),
+    SetWrongName(SetReport, String)
+}
+
+impl Display for FileReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FileReport::Unneded(file_name) => {
+                write!(f, "Unneeded: {}", file_name)
+            }
+            FileReport::Set(set_report) => {
+                write!(f, "Set: {}", set_report)
+            }
+            FileReport::SetWrongName(set_report, file_name) => {
+                write!(f, "Set {} <= {}", file_name, set_report)
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct SetReport {
-    pub name: SetNameReport,
+    pub name: String,
     pub roms_have: Vec<DataFile>,
     pub roms_to_rename: Vec<FileRename>,
     pub roms_missing: Vec<DataFile>,
     pub roms_unneeded: Vec<DataFile>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum SetNameReport {
     Name(String),
     RenameFromTo(String, String)
@@ -50,7 +73,7 @@ impl SetNameReport {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct FileRename {
     pub from: DataFile,
     pub to: String,
@@ -61,7 +84,7 @@ impl FileRename {
 }
 
 impl SetReport {
-    pub fn new(name: SetNameReport) -> Self {
+    pub fn new(name: String) -> Self {
         Self {
             name,
             roms_have: vec![],
@@ -71,7 +94,7 @@ impl SetReport {
         }
     }
 
-    pub fn from_data(name: SetNameReport, roms_have: Vec<DataFile>, roms_to_rename: Vec<FileRename>, roms_missing: Vec<DataFile>, roms_unneeded: Vec<DataFile>) -> Self {
+    pub fn from_data(name: String, roms_have: Vec<DataFile>, roms_to_rename: Vec<FileRename>, roms_missing: Vec<DataFile>, roms_unneeded: Vec<DataFile>) -> Self {
         Self { name, roms_have, roms_to_rename, roms_missing, roms_unneeded }
     }
 
@@ -87,10 +110,7 @@ impl SetReport {
 
 impl Display for SetReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut output = match &self.name {
-            SetNameReport::Name(name) => { format!("{}", name) }
-            SetNameReport::RenameFromTo(from, to) => { format!("{} => {}", from, to) }
-        };
+        let mut output = format!("{}", self.name);
 
         if self.roms_have.len() > 0 {
             output.push_str("\nRoms:");

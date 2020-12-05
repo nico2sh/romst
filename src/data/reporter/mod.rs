@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
 
-use self::report::{FileRename, Report, SetNameReport, SetReport};
+use self::report::{FileRename, FileReport, Report, SetNameReport, SetReport};
 
 use super::{models::set::GameSet, reader::DataReader};
 use anyhow::Result;
@@ -58,7 +58,8 @@ impl<R: DataReader> Reporter<R> {
 
             let reference_set = GameSet::new(game, roms, vec![], vec![]);
 
-            report.add_set(self.compare_set(game_set, reference_set)?);
+            let set_report = self.compare_set(game_set, reference_set)?;
+            report.add_set(FileReport::Set(set_report));
         }
 
         Ok(report)
@@ -82,7 +83,7 @@ impl<R: DataReader> Reporter<R> {
 
     pub fn compare_set(&mut self, game_set: GameSet, reference_set: GameSet) -> Result<SetReport> {
         let mut set_roms = game_set.roms;
-        let mut report = SetReport::new(SetNameReport::new(game_set.game.name, reference_set.game.name));
+        let mut report = SetReport::new(game_set.game.name);
 
         reference_set.roms.into_iter().for_each(|rom| {
             let found_rom = set_roms.iter().position(|set_rom| {
@@ -133,7 +134,7 @@ mod tests {
     }
 
     #[test]
-    fn get_data_from_file() -> Result<()> {
+    fn get_right_data_from_file() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
         let data_reader = DBReader::from_connection(&conn);
@@ -144,6 +145,105 @@ mod tests {
         let game_path = Path::new("testdata").join("split");
         let report = reporter.check(vec![ game_path ], &RomsetMode::Split)?;
         println!("{}", report);
+
+        let report_sets = report.files;
+        assert!(report_sets.len() == 5);
+        assert!(report_sets.iter().filter(|file| {
+            if let FileReport::Set(set_report) = file {
+                set_report.name == "game1"
+                && set_report.roms_have.len() == 4
+                && set_report.roms_missing.len() == 0
+                && set_report.roms_to_rename.len() == 0
+                && set_report.roms_unneeded.len() == 0
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
+        assert!(report_sets.iter().filter(|file| {
+            if let FileReport::Set(set_report) = file {
+                set_report.name == "game1a"
+                && set_report.roms_have.len() == 2
+                && set_report.roms_missing.len() == 0
+                && set_report.roms_to_rename.len() == 0
+                && set_report.roms_unneeded.len() == 0
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
+        assert!(report_sets.iter().filter(|file| {
+            if let FileReport::Set(set_report) = file {
+                set_report.name == "game3"
+                && set_report.roms_have.len() == 3
+                && set_report.roms_missing.len() == 0
+                && set_report.roms_to_rename.len() == 0
+                && set_report.roms_unneeded.len() == 0
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
+        assert!(report_sets.iter().filter(|file| {
+            if let FileReport::Set(set_report) = file {
+                set_report.name == "device1"
+                && set_report.roms_have.len() == 1
+                && set_report.roms_missing.len() == 0
+                && set_report.roms_to_rename.len() == 0
+                && set_report.roms_unneeded.len() == 0
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn get_wrong_data_from_file() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+        let data_reader = DBReader::from_connection(&conn);
+
+        let file_reader = FileReader::new();
+        let mut reporter = Reporter::new(data_reader, file_reader);
+
+        let game_path = Path::new("testdata").join("wrong");
+        let report = reporter.check(vec![ game_path ], &RomsetMode::Split)?;
+        println!("{}", report);
+
+        let report_sets = report.files;
+        assert!(report_sets.len() == 3);
+        assert!(report_sets.iter().filter(|file| {
+            if let FileReport::Set(set_report) = file {
+                set_report.name == "game1"
+                && set_report.roms_have.len() == 3
+                && set_report.roms_missing.len() == 1
+                && set_report.roms_to_rename.len() == 0
+                && set_report.roms_unneeded.len() == 0
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
+        assert!(report_sets.iter().filter(|file| {
+            if let FileReport::Set(set_report) = file {
+                set_report.name == "game2"
+                && set_report.roms_have.len() == 2
+                && set_report.roms_missing.len() == 0
+                && set_report.roms_to_rename.len() == 1
+                && set_report.roms_unneeded.len() == 0
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
+        assert!(report_sets.iter().filter(|file| {
+            if let FileReport::Set(set_report) = file {
+                set_report.name == "game3"
+                && set_report.roms_have.len() == 3
+                && set_report.roms_missing.len() == 0
+                && set_report.roms_to_rename.len() == 0
+                && set_report.roms_unneeded.len() == 1
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
 
         Ok(())
     }
