@@ -47,38 +47,41 @@ impl<R: DataReader> Reporter<R> {
         }
     }
 
-    pub fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Report> {
-        let game_sets = self.get_sets_from_path(file_paths)?;
+    fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Report> {
         let mut report = Report::new();
-
-        for game_set in game_sets {
-            // TODO: fix if the game is not found
-            let game = self.data_reader.get_game(&game_set.game.name).unwrap();
-            let roms = self.data_reader.get_romset_roms(&game_set.game.name, rom_mode)?;
-
-            let reference_set = GameSet::new(game, roms, vec![], vec![]);
-
-            let set_report = self.compare_set(game_set, reference_set)?;
-            report.add_set(FileReport::Set(set_report));
-        }
-
-        Ok(report)
-    }
-
-    fn get_sets_from_path(&mut self, file_paths: Vec<impl AsRef<Path>>) -> Result<Vec<GameSet>> {
-        let mut result = vec![];
         for file_path in file_paths {
             let path = file_path.as_ref();
             if path.is_file() {
                 match self.file_reader.get_game_set(&file_path, FileChecks::ALL) {
-                    Ok(game_set) => { result.push(game_set) },
-                    Err(RomstIOError::NotValidFileError(file_name, _file_type )) => { warn!("File {} is not a valid file", file_name) },
+                    Ok(game_set) => {
+                        let file_report = self.on_set_found(game_set, rom_mode)?;
+                        report.add_set(file_report)
+                    },
+                    Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
+                        warn!("File {} is not a valid file", file_name);
+                        let file_name = file_path.as_ref().to_path_buf().into_os_string().into_string().unwrap_or_else(|ref osstring| {
+                            osstring.to_string_lossy().to_string()
+                        });
+                        report.add_set(FileReport::Unneded(file_name))
+                    },
                     Err(e) => { error!("ERROR: {}", e) }
                 }
             }
         };
 
-        Ok(result)
+        Ok(report)
+    }
+
+    fn on_set_found(&mut self, game_set: GameSet, rom_mode: &RomsetMode) -> Result<FileReport> {
+        // TODO: fix if the game is not found
+        let game = self.data_reader.get_game(&game_set.game.name).unwrap();
+        let roms = self.data_reader.get_romset_roms(&game_set.game.name, rom_mode)?;
+
+        let reference_set = GameSet::new(game, roms, vec![], vec![]);
+
+        let set_report = self.compare_set(game_set, reference_set)?;
+
+        Ok(FileReport::Set(set_report))
     }
 
     pub fn compare_set(&mut self, game_set: GameSet, reference_set: GameSet) -> Result<SetReport> {
@@ -206,11 +209,11 @@ mod tests {
         let mut reporter = Reporter::new(data_reader, file_reader);
 
         let game_path = Path::new("testdata").join("wrong");
-        let report = reporter.check(vec![ game_path ], &RomsetMode::Split)?;
+        let report = reporter.check(vec![ &game_path ], &RomsetMode::Split)?;
         println!("{}", report);
 
         let report_sets = report.files;
-        assert!(report_sets.len() == 3);
+        assert!(report_sets.len() == 4);
         assert!(report_sets.iter().filter(|file| {
             if let FileReport::Set(set_report) = file {
                 set_report.name == "game1"
@@ -240,6 +243,14 @@ mod tests {
                 && set_report.roms_missing.len() == 0
                 && set_report.roms_to_rename.len() == 0
                 && set_report.roms_unneeded.len() == 1
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
+        assert!(report_sets.iter().filter(|file| {
+            if let FileReport::Unneded(file_name) = file {
+                let expected = &game_path.join("info.txt");
+                file_name == expected.to_str().unwrap()
             } else {
                 false
             }

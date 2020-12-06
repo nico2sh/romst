@@ -29,7 +29,7 @@ impl Display for Report {
 pub enum FileReport {
     Unneded(String),
     Set(SetReport),
-    SetWrongName(SetReport, String)
+    SetWrongName(SetReport, String),
 }
 
 impl Display for FileReport {
