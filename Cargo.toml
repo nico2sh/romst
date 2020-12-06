@@ -20,3 +20,4 @@ rusqlite = { version = "0.24.1", features = [ "bundled" ] }
 zip = "0.5"
 sha-1 = "0.9"
 md-5 = "0.9"
+rayon = "1.5"
