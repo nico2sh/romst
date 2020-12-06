@@ -2,7 +2,7 @@ mod report;
 
 use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
-
+use rayon::prelude::*;
 use self::report::{FileRename, FileReport, Report, SetNameReport, SetReport};
 
 use super::{models::set::GameSet, reader::DataReader};
@@ -47,26 +47,34 @@ impl<R: DataReader> Reporter<R> {
     }
 
     fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Report> {
-        let mut report = Report::new();
-        file_paths.iter().for_each(|fp| {
+        let r: Vec<FileReport> = file_paths.iter().filter_map(|fp| {
             let path = fp.as_ref();
             if path.is_file() {
                 match self.file_reader.get_game_set(&path, FileChecks::ALL) {
                     Ok(game_set) => {
                         let file_report = self.on_set_found(game_set, rom_mode).unwrap();
-                        report.add_set(file_report)
+                        Some(file_report)
+                        //report.add_set(file_report)
                     },
                     Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
                         warn!("File {} is not a valid file", file_name);
                         let file_name = path.to_path_buf().into_os_string().into_string().unwrap_or_else(|ref osstring| {
                             osstring.to_string_lossy().to_string()
                         });
-                        report.add_set(FileReport::Unneded(file_name))
+                        //report.add_set(FileReport::Unneded(file_name))
+                        Some(FileReport::Unneded(file_name))
                     },
-                    Err(e) => { error!("ERROR: {}", e) }
+                    Err(e) => {
+                        error!("ERROR: {}", e);
+                        None
+                    }
                 }
+            } else {
+                None
             }
-        });
+        }).collect();
+
+        let report = Report::from_files(r);
 
         Ok(report)
     }

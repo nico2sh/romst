@@ -10,6 +10,10 @@ pub struct Report {
 impl Report {
     pub fn new() -> Self { Self { files: vec![] } }
 
+    pub fn from_files(files: Vec<FileReport>) -> Self {
+        Self { files }
+    }
+
     pub fn add_set(&mut self, file_report: FileReport) {
         self.files.push(file_report);
     }
