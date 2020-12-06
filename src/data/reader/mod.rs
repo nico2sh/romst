@@ -22,4 +22,6 @@ pub trait DataReader {
     /// Gets all romsets that include roms in the searched game
     /// This is useful to know what new (incomplete though) sets can be generated from the current one
     fn get_romset_shared_roms(&self, game_name: &String) -> Result<HashMap<String, Vec<String>>>;
+
+    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode);
 }

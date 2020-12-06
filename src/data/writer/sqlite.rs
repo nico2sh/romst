@@ -125,7 +125,8 @@ impl <'d> DBWriter<'d> {
                         statement_where.push(format!("size = ?{}", param_num));
                     }
 
-                    let statement = "SELECT id FROM roms WHERE ".to_string() + &statement_where.join(" AND ") + ";";
+                    let statement = "SELECT id FROM roms WHERE ".to_string() +
+                        &statement_where.join(" AND ") + ";";
 
                     let mut rom_stmt = self.conn.prepare_cached(&statement)?;
                     let rom_result: rusqlite::Result<u32> = rom_stmt.query_row(params, |row| {

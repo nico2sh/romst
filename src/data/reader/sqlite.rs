@@ -1,8 +1,8 @@
 use std::{collections::HashSet, iter::FromIterator, collections::HashMap};
 
 use anyhow::Result;
-use log::error;
-use rusqlite::{Connection, params};
+use log::{error, warn};
+use rusqlite::{Connection, ToSql, params};
 
 use crate::{RomsetMode, data::models::{file::{DataFile, FileType::Rom}, game::Game}};
 
@@ -85,6 +85,59 @@ impl <'d> DBReader <'d>{
         })?;
 
         return Ok(format!("{} games", result))
+    }
+
+    fn get_rom_ids_from_files(&self, roms: Vec<DataFile>) -> Result<(Vec<u32>, Vec<DataFile>)> {
+        let mut result = vec![];
+        let mut not_found = vec![];
+        for rom in roms {
+            let mut params: Vec<&dyn ToSql> = vec![];
+            let mut statement_where = vec![];
+            let mut param_num = 1;
+            if rom.sha1.is_some() {
+                params.push(rom.sha1.as_ref().unwrap());
+                statement_where.push(format!("(sha1 = ?{} OR sha1 IS NULL)", param_num));
+                param_num = param_num + 1;
+            }
+            
+            if rom.md5.is_some() {
+                params.push(rom.md5.as_ref().unwrap());
+                statement_where.push(format!("(md5 = ?{} OR md5 IS NULL)", param_num));
+                param_num = param_num + 1;
+            }
+
+            if rom.crc.is_some() {
+                params.push(rom.crc.as_ref().unwrap());
+                statement_where.push(format!("(crc = ?{} OR crc IS NULL)", param_num));
+                param_num = param_num + 1;
+            }
+
+            if rom.size.is_some() {
+                params.push(rom.size.as_ref().unwrap());
+                statement_where.push(format!("(size = ?{} OR size IS NULL)", param_num));
+            }
+
+            let statement = "SELECT id FROM roms WHERE ".to_string() +
+                &statement_where.join(" AND ") + ";";
+
+            let mut rom_stmt = self.conn.prepare_cached(&statement)?;
+            let rom_result: rusqlite::Result<u32> = rom_stmt.query_row(params, |row| {
+                Ok(row.get(0)?)
+            });
+
+            match rom_result {
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    not_found.push(rom);
+                    warn!("No ROM found");
+                },
+                Ok(id) => {
+                    result.push(id);
+                },
+                Err(e) => error!("Error adding a rom: {}", e),
+            };
+        }
+        
+        Ok((result, not_found))
     }
 }
 
@@ -178,4 +231,115 @@ impl <'d> DataReader for DBReader<'d> {
 
         Ok(result)
     }
+
+    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) {
+        
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{io::BufReader, fs::File, path::Path};
+    use rusqlite::{Connection, OpenFlags};
+    use crate::data::{importer::DatImporter, reader::sqlite::DBReader, models::file::FileType, writer::{sqlite::DBWriter, DataWriter}};
+    use super::*;
+
+    fn get_db_connection<'a, 'b>(dat_path: &'b impl AsRef<Path>) -> Result<Connection> {
+        let mut conn = Connection::open_in_memory_with_flags(OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
+        let writer = DBWriter::from_connection(&mut conn, 100);
+        writer.init().unwrap();
+        let mut importer = DatImporter::<BufReader<File>, DBWriter>::from_path(dat_path, writer);
+        importer.load_dat()?;
+
+        Ok(conn)
+    }
+
+    #[test]
+    fn find_rom_id_from_sha1() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+        let data_reader = DBReader::from_connection(&conn);
+
+        let mut roms = vec![];
+        let mut rom1 = DataFile::new(FileType::Rom);
+        rom1.sha1 = Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string());
+        roms.push(rom1);
+        let result = data_reader.get_rom_ids_from_files(roms)?;
+        let rom_ids = result.0;
+        let not_found = result.1;
+
+        assert!(rom_ids.len() == 1);
+        assert!(rom_ids[0] == 1);
+        assert!(not_found.len() == 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_rom_id_from_sha1_and_crc() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+        let data_reader = DBReader::from_connection(&conn);
+
+        let mut roms = vec![];
+        let mut rom1 = DataFile::new(FileType::Rom);
+        rom1.sha1 = Some("802e076afc412be12db3cb8c79523f65d612a6cf".to_string());
+        rom1.crc = Some("dc20b010".to_string());
+        roms.push(rom1);
+        let result = data_reader.get_rom_ids_from_files(roms)?;
+        let rom_ids = result.0;
+        let not_found = result.1;
+
+        assert!(rom_ids.len() == 1);
+        assert!(rom_ids[0] == 0);
+        assert!(not_found.len() == 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_rom_id_from_sha1_and_crc_and_md5_but_no_md5_in_db() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+        let data_reader = DBReader::from_connection(&conn);
+
+        let mut roms = vec![];
+        let mut rom1 = DataFile::new(FileType::Rom);
+        rom1.sha1 = Some("8273bfebe84dd41a5d237add8f9d03ac9bb0ef54".to_string());
+        rom1.crc = Some("1b736d41".to_string());
+        rom1.md5 = Some("0de4e413deb3ae71e9326d70df4d1a27".to_string());
+        roms.push(rom1);
+        let result = data_reader.get_rom_ids_from_files(roms)?;
+        let rom_ids = result.0;
+        let not_found = result.1;
+
+        assert!(rom_ids.len() == 1);
+        assert!(rom_ids[0] == 4);
+        assert!(not_found.len() == 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn dont_find_rom_id_from_sha1_and_crc_and_wrong_size() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+        let data_reader = DBReader::from_connection(&conn);
+
+        let mut roms = vec![];
+        let mut rom1 = DataFile::new(FileType::Rom);
+        rom1.sha1 = Some("8273bfebe84dd41a5d237add8f9d03ac9bb0ef54".to_string());
+        rom1.crc = Some("1b736d41".to_string());
+        rom1.size = Some(1024);
+        roms.push(rom1);
+        let result = data_reader.get_rom_ids_from_files(roms)?;
+        let rom_ids = result.0;
+        let not_found = result.1;
+
+        assert!(rom_ids.len() == 0);
+        assert!(not_found.len() == 1);
+
+        Ok(())
+    }
+
 }
