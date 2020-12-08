@@ -239,7 +239,7 @@ impl <'d> DataWriter for DBWriter<'d> {
                         "INSERT INTO game_roms (game_name, rom_id, name) VALUES (?1, ?2, ?3);",
                         params![ game.name, rom_id_name.0, rom_id_name.1 ] );
                     match result {
-                        Ok(_n) => { debug!("Inserted a rom to a game") }
+                        Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.1, rom_id_name.0, game.name) }
                         Err(e) => { error!("Error adding rom `{}` to the game {}: {}", rom_id_name.1, "", e) }
                     }
                 }

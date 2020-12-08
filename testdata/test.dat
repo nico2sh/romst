@@ -67,9 +67,9 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<description>Game 3</description>
 		<year>2000</year>
 		<manufacturer>Acme</manufacturer>
-		<rom name="file1.rom" size="2048" crc="80e71f71" SHA1="cc218850743cff0cc46cc1c711176c5bf199c306" />
-		<rom name="file2.rom" size="2048" crc="50321fb2" SHA1="d85488ea520680955ee0b01c40cd1e2abeb6b5e1" />
-		<rom name="file3.rom" size="2048" crc="1794e742" SHA1="77de22e8f83e06bc6b8afd9e255ca92661917195" />
+		<rom name="file1.rom" size="2048" crc="80e71f71" sha1="cc218850743cff0cc46cc1c711176c5bf199c306" />
+		<rom name="file2.rom" size="2048" crc="50321fb2" sha1="d85488ea520680955ee0b01c40cd1e2abeb6b5e1" />
+		<rom name="file3.rom" size="2048" crc="1794e742" sha1="77de22e8f83e06bc6b8afd9e255ca92661917195" />
 	</machine>
 </datafile>
 

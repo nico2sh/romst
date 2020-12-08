@@ -1,6 +1,6 @@
 pub mod sqlite;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::RomsetMode;
 
@@ -23,5 +23,5 @@ pub trait DataReader {
     /// This is useful to know what new (incomplete though) sets can be generated from the current one
     fn get_romset_shared_roms(&self, game_name: &String) -> Result<HashMap<String, Vec<String>>>;
 
-    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode);
+    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) -> Result<HashMap<String, HashSet<DataFile>>>;
 }

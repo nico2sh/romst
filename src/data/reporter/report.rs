@@ -22,7 +22,7 @@ impl Report {
 impl Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for file in &self.files {
-            write!(f, "\n{}\n", file)?;
+            write!(f, "{}\n", file)?;
         }
 
         Ok(())
@@ -30,25 +30,37 @@ impl Display for Report {
 }
 
 #[derive(Debug)]
-pub enum FileReport {
-    Unneded(String),
-    Set(SetReport),
-    SetWrongName(SetReport, String),
+pub struct FileReport {
+    pub file_name: String,
+    pub sets: Vec<SetReport>,
+    pub unknown: Vec<String>
 }
+
+impl FileReport {
+    pub fn new(file_name: String) -> Self { Self { file_name, sets: vec![], unknown: vec![] } }
+    pub fn add_set(&mut self, set: SetReport) {
+        self.sets.push(set);
+    }
+    pub fn add_unknown(&mut self, unknown: String) {
+        self.unknown.push(unknown);
+    }
+}
+
 
 impl Display for FileReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FileReport::Unneded(file_name) => {
-                write!(f, "Unneeded: {}", file_name)
-            }
-            FileReport::Set(set_report) => {
-                write!(f, "Set: {}", set_report)
-            }
-            FileReport::SetWrongName(set_report, file_name) => {
-                write!(f, "Set {} <= {}", file_name, set_report)
-            }
+        writeln!(f, "File name: {}", self.file_name)?;
+        for s in &self.sets {
+            writeln!(f, "- Set: {}", s)?;
         }
+        if self.unknown.len() > 0 {
+            writeln!(f, "Unknown files:")?;
+        }
+        for file in &self.unknown {
+            writeln!(f, "- {}", file)?;
+        }
+
+        Ok(())
     }
 }
 

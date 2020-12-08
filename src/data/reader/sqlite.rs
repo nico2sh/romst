@@ -4,9 +4,40 @@ use anyhow::Result;
 use log::{error, warn};
 use rusqlite::{Connection, ToSql, params};
 
-use crate::{RomsetMode, data::models::{file::{DataFile, FileType::Rom}, game::Game}};
+use crate::{RomsetMode, data::models::{file::{DataFile, FileType::{self, Rom}}, game::Game}};
 
 use super::DataReader;
+
+struct SearchRomIds {
+    found: Vec<u32>,
+    not_found: Vec<DataFile>
+}
+
+impl SearchRomIds {
+    fn new() -> Self { Self { found: vec![], not_found: vec![] } }
+
+    fn add_found(&mut self, id: u32) {
+        self.found.push(id);
+    }
+
+    fn add_not_found(&mut self, rom: DataFile) {
+        self.not_found.push(rom);
+    }
+}
+
+/*
+Game name = row.get(0)?;
+Rom name = row.get(1)?;
+Rom sha1 = row.get(2)?;
+Rom md5 = row.get(3)?;
+Rom crc = row.get(4)?;
+Rom size = row.get(5)?;
+Rom status = row.get(6)?;
+Rom parent = row.get(7)?;
+Game clone_of = row.get(8)?;
+*/
+const ROMS_QUERY: &str = "SELECT DISTINCT game_roms.game_name, game_roms.name as rom_name, roms.sha1, roms.md5, roms.crc, roms.size, roms.status, game_roms.parent, games.clone_of
+                FROM game_roms JOIN roms ON game_roms.rom_id = roms.id JOIN games ON game_roms.game_name = games.name";
 
 #[derive(Debug)]
 pub struct DBReader<'d> {
@@ -19,18 +50,18 @@ impl <'d> DBReader <'d>{
     }
 
     fn get_merged_set_roms(&self, game_name: &String) -> Result<Vec<DataFile>> {
-        let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.name, roms.sha1, roms.md5, roms.crc, roms.size, roms.status
-            FROM game_roms 
-            JOIN roms ON roms.id = game_roms.rom_id WHERE (game_roms.game_name = ?1 OR game_roms.parent = ?1);")?;
+        let query = ROMS_QUERY.to_string() + " WHERE (game_roms.game_name = ?1 OR games.clone_of = ?1);";
+
+        let mut roms_stmt = self.conn.prepare(&query)?;
         let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
             Ok(DataFile {
                 file_type: Rom,
-                name: row.get(0)?,
-                sha1: row.get(1)?,
-                md5: row.get(2)?,
-                crc: row.get(3)?,
-                size: row.get(4)?,
-                status: row.get(5)?,
+                name: row.get(1)?,
+                sha1: row.get(2)?,
+                md5: row.get(3)?,
+                crc: row.get(4)?,
+                size: row.get(5)?,
+                status: row.get(6)?,
             })
         })?.filter_map(|row| row.ok());
 
@@ -39,19 +70,18 @@ impl <'d> DBReader <'d>{
     }
 
     fn get_nonmerged_set_roms(&self, game_name: &String) -> Result<Vec<DataFile>> {
-        let mut nonmerged_stmt = self.conn.prepare("SELECT game_roms.name, roms.sha1, roms.md5, roms.crc, roms.size, roms.status
-            FROM game_roms 
-            JOIN roms ON roms.id = game_roms.rom_id
-            WHERE game_roms.game_name = ?1")?;
+        let query = ROMS_QUERY.to_string() + " WHERE game_roms.game_name = ?1";
+
+        let mut nonmerged_stmt = self.conn.prepare(&query)?;
         let roms_rows = nonmerged_stmt.query_map(params![ game_name ], |row| {
             Ok(DataFile {
                 file_type: Rom,
-                name: row.get(0)?,
-                sha1: row.get(1)?,
-                md5: row.get(2)?,
-                crc: row.get(3)?,
-                size: row.get(4)?,
-                status: row.get(5)?,
+                name: row.get(1)?,
+                sha1: row.get(2)?,
+                md5: row.get(3)?,
+                crc: row.get(4)?,
+                size: row.get(5)?,
+                status: row.get(6)?,
             })
         })?.filter_map(|row| row.ok());
 
@@ -59,9 +89,9 @@ impl <'d> DBReader <'d>{
     }
 
     fn get_split_set_roms(&self, game_name: &String) -> Result<Vec<DataFile>> {
-        let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.name, roms.sha1, roms.md5, roms.crc, roms.size, roms.status
-            FROM game_roms 
-            JOIN roms ON roms.id = game_roms.rom_id WHERE (game_roms.game_name = ?1 AND game_roms.parent IS NULL);")?;
+        let query = ROMS_QUERY.to_string() + " WHERE (game_roms.game_name = ?1 AND game_roms.parent IS NULL);";
+
+        let mut roms_stmt = self.conn.prepare(&query)?;
         let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
             Ok(DataFile {
                 file_type: Rom,
@@ -79,7 +109,7 @@ impl <'d> DBReader <'d>{
     }
 
     pub fn get_stats(&self) -> Result<String> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM games;")?;
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM game_roms;")?;
         let result: u32 = stmt.query_row(params![], |row| {
             Ok(row.get(0)?)
         })?;
@@ -87,9 +117,8 @@ impl <'d> DBReader <'d>{
         return Ok(format!("{} games", result))
     }
 
-    fn get_rom_ids_from_files(&self, roms: Vec<DataFile>) -> Result<(Vec<u32>, Vec<DataFile>)> {
-        let mut result = vec![];
-        let mut not_found = vec![];
+    fn get_rom_ids_from_files(&self, roms: Vec<DataFile>) -> Result<SearchRomIds> {
+        let mut result = SearchRomIds::new();
         for rom in roms {
             let mut params: Vec<&dyn ToSql> = vec![];
             let mut statement_where = vec![];
@@ -127,18 +156,79 @@ impl <'d> DBReader <'d>{
 
             match rom_result {
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    not_found.push(rom);
+                    result.add_not_found(rom);
                     warn!("No ROM found");
                 },
                 Ok(id) => {
-                    result.push(id);
+                    result.add_found(id);
                 },
                 Err(e) => error!("Error adding a rom: {}", e),
             };
         }
         
-        Ok((result, not_found))
+        Ok(result)
     }
+
+    fn find_sets_for_roms(&self, rom_ids: Vec<u32>, rom_mode: &RomsetMode) -> Result<HashMap<String, HashSet<DataFile>>> {
+        let mut params: Vec<&dyn ToSql> = vec![];
+        let mut ids_cond = String::new();
+        let mut i = 0;
+        rom_ids.iter().for_each(|rom_id| {
+            if i != 0 {
+                ids_cond.push_str(", ");
+            }
+            i += 1;                     
+            ids_cond.push_str("?");
+            ids_cond.push_str(&i.to_string());
+            params.push(rom_id);
+        });
+
+        let query = ROMS_QUERY.to_string() + " WHERE game_roms.rom_id IN (" + &ids_cond + ") ORDER BY game_roms.game_name;";
+
+        let mut roms_stmt = self.conn.prepare(&query)?;
+        let roms_rows = roms_stmt.query_map(params, |row| {
+            let mut data_file = DataFile::new(FileType::Rom);
+            data_file.name = row.get(1)?;
+            data_file.sha1 = row.get(2)?;
+            data_file.md5 = row.get(3)?;
+            data_file.crc = row.get(4)?;
+            data_file.size = row.get(5)?;
+            data_file.status = row.get(6)?;
+            Ok((row.get(0)?,
+                data_file,
+                row.get(7)?,
+                row.get(8)?))
+        })?.filter_map(|row| row.ok());
+
+        let mut result: HashMap<String, HashSet<DataFile>> = HashMap::new();
+        for item in roms_rows {
+            let game_name = item.0;
+            let rom = item.1;
+            let game_parent: Option<String> = item.2;
+            let clone_of: Option<String> = item.3;
+
+            match rom_mode {
+                RomsetMode::Merged => {
+                    if let Some(game_parent_name) = clone_of {
+                        result.entry(game_parent_name).or_insert(HashSet::new()).insert(rom);
+                    } else {
+                        result.entry(game_name).or_insert(HashSet::new()).insert(rom);
+                    }
+                }
+                RomsetMode::NonMerged => {
+                    result.entry(game_name).or_insert(HashSet::new()).insert(rom);
+                }
+                RomsetMode::Split => {
+                    if game_parent == None {
+                        result.entry(game_name).or_insert(HashSet::new()).insert(rom);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
 }
 
 impl <'d> DataReader for DBReader<'d> {
@@ -232,8 +322,10 @@ impl <'d> DataReader for DBReader<'d> {
         Ok(result)
     }
 
-    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) {
-        
+    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) -> Result<HashMap<String, HashSet<DataFile>>> {
+        let search_rom_ids_result = self.get_rom_ids_from_files(roms)?;
+
+        self.find_sets_for_roms(search_rom_ids_result.found, rom_mode)
     }
 }
 
@@ -255,6 +347,30 @@ mod tests {
     }
 
     #[test]
+    fn find_sets_for_roms() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+        let data_reader = DBReader::from_connection(&conn);
+
+        let mut roms = vec![];
+        let mut rom1 = DataFile::new(FileType::Rom);
+        rom1.sha1 = Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string());
+        roms.push(rom1);
+        let mut rom2 = DataFile::new(FileType::Rom);
+        rom2.sha1 = Some("802e076afc412be12db3cb8c79523f65d612a6cf".to_string());
+        rom2.crc = Some("dc20b010".to_string());
+        roms.push(rom2);
+
+        let rom_sets = data_reader.get_romsets_from_roms(roms, &RomsetMode::Merged)?;
+        println!("{:?}", rom_sets);
+
+        let stats = data_reader.get_stats()?;
+        println!("{}", stats);
+
+        Ok(())
+    }
+
+    #[test]
     fn find_rom_id_from_sha1() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
@@ -265,8 +381,8 @@ mod tests {
         rom1.sha1 = Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string());
         roms.push(rom1);
         let result = data_reader.get_rom_ids_from_files(roms)?;
-        let rom_ids = result.0;
-        let not_found = result.1;
+        let rom_ids = result.found;
+        let not_found = result.not_found;
 
         assert!(rom_ids.len() == 1);
         assert!(rom_ids[0] == 1);
@@ -287,8 +403,8 @@ mod tests {
         rom1.crc = Some("dc20b010".to_string());
         roms.push(rom1);
         let result = data_reader.get_rom_ids_from_files(roms)?;
-        let rom_ids = result.0;
-        let not_found = result.1;
+        let rom_ids = result.found;
+        let not_found = result.not_found;
 
         assert!(rom_ids.len() == 1);
         assert!(rom_ids[0] == 0);
@@ -310,8 +426,8 @@ mod tests {
         rom1.md5 = Some("0de4e413deb3ae71e9326d70df4d1a27".to_string());
         roms.push(rom1);
         let result = data_reader.get_rom_ids_from_files(roms)?;
-        let rom_ids = result.0;
-        let not_found = result.1;
+        let rom_ids = result.found;
+        let not_found = result.not_found;
 
         assert!(rom_ids.len() == 1);
         assert!(rom_ids[0] == 4);
@@ -333,8 +449,8 @@ mod tests {
         rom1.size = Some(1024);
         roms.push(rom1);
         let result = data_reader.get_rom_ids_from_files(roms)?;
-        let rom_ids = result.0;
-        let not_found = result.1;
+        let rom_ids = result.found;
+        let not_found = result.not_found;
 
         assert!(rom_ids.len() == 0);
         assert!(not_found.len() == 1);

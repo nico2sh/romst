@@ -45,15 +45,7 @@ impl FileReader {
             None => { "" }
         };
 
-        let game = Game {
-            name: game_name.to_string(),
-            clone_of: None,
-            rom_of: None,
-            source_file: None,
-            info_description: None,
-            info_year: None,
-            info_manufacturer: None,
-        };
+        let game = Game::new(game_name.to_string());
 
         let use_sha1 = file_checks.contains(FileChecks::SHA1);
         let use_md5 = file_checks.contains(FileChecks::MD5);

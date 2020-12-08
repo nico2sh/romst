@@ -5,7 +5,7 @@ use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileC
 use rayon::prelude::*;
 use self::report::{FileRename, FileReport, Report, SetNameReport, SetReport};
 
-use super::{models::set::GameSet, reader::DataReader};
+use super::{models::{file::DataFile, set::GameSet}, reader::DataReader};
 use anyhow::Result;
 use log::{error, warn};
 
@@ -54,15 +54,14 @@ impl<R: DataReader> Reporter<R> {
                     Ok(game_set) => {
                         let file_report = self.on_set_found(game_set, rom_mode).unwrap();
                         Some(file_report)
-                        //report.add_set(file_report)
                     },
                     Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
                         warn!("File {} is not a valid file", file_name);
                         let file_name = path.to_path_buf().into_os_string().into_string().unwrap_or_else(|ref osstring| {
                             osstring.to_string_lossy().to_string()
                         });
-                        //report.add_set(FileReport::Unneded(file_name))
-                        Some(FileReport::Unneded(file_name))
+                        // TODO: Unknown file, fix
+                        None
                     },
                     Err(e) => {
                         error!("ERROR: {}", e);
@@ -80,45 +79,51 @@ impl<R: DataReader> Reporter<R> {
     }
 
     fn on_set_found(&mut self, game_set: GameSet, rom_mode: &RomsetMode) -> Result<FileReport> {
-        // TODO: fix if the game is not found
-        let game = self.data_reader.get_game(&game_set.game.name).unwrap();
-        let roms = self.data_reader.get_romset_roms(&game_set.game.name, rom_mode)?;
+        let mut file_report = FileReport::new(game_set.game.name);
 
-        let reference_set = GameSet::new(game, roms, vec![], vec![]);
+        let rom_usage_result = self.data_reader.get_romsets_from_roms(game_set.roms, rom_mode)?;
 
-        let set_report = self.compare_set(game_set, reference_set)?;
+        for entry in rom_usage_result {
+            let set_name = entry.0;
+            let roms = entry.1;
 
-        Ok(FileReport::Set(set_report))
+            let set_report = self.compare_roms_with_set(roms.into_iter().collect(), set_name, rom_mode)?;
+
+            file_report.add_set(set_report);
+        };
+
+        Ok(file_report)
     }
 
-    pub fn compare_set(&mut self, game_set: GameSet, reference_set: GameSet) -> Result<SetReport> {
-        let mut set_roms = game_set.roms;
-        let mut report = SetReport::new(game_set.game.name);
+    pub fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: &RomsetMode) -> Result<SetReport> {
+        let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
 
-        reference_set.roms.into_iter().for_each(|rom| {
-            let found_rom = set_roms.iter().position(|set_rom| {
+        let mut report = SetReport::new(set_name);
+
+        roms.into_iter().for_each(|rom| {
+            let found_rom = db_roms.iter().position(|set_rom| {
                 rom.deep_compare(&set_rom, FileChecks::ALL, false).ok().unwrap_or_else(|| false)
             });
 
             let rom_name = rom.name.to_owned().unwrap_or_else(|| {"".to_string()});
             match found_rom {
                 Some(set_rom_pos) => {
-                    let set_rom = set_roms.remove(set_rom_pos);
+                    let set_rom = db_roms.remove(set_rom_pos);
                     let set_rom_name = set_rom.name.to_owned().unwrap_or_else(|| {"".to_string()});
                     if rom_name == set_rom_name {
                         report.roms_have.push(set_rom);
                     } else {
-                        let file_rename = FileRename::new(set_rom, rom_name);
+                        let file_rename = FileRename::new(rom, set_rom_name);
                         report.roms_to_rename.push(file_rename);
                     }
                 }
                 None => {
-                    report.roms_missing.push(rom);
+                    report.roms_unneeded.push(rom);
                 }
             }
         });
 
-        report.roms_unneeded = set_roms.into_iter().filter_map(|rom| {
+        report.roms_missing = db_roms.into_iter().filter_map(|rom| {
             Some(rom)
         }).collect();
 
@@ -153,26 +158,42 @@ mod tests {
         let mut reporter = Reporter::new(data_reader, file_reader);
 
         let game_path = Path::new("testdata").join("split");
-        let report = reporter.check(vec![ game_path ], &RomsetMode::Split)?;
-        println!("{}", report);
+        let report = reporter.check(vec![ game_path ], &RomsetMode::Merged)?;
 
         let report_sets = report.files;
         assert!(report_sets.len() == 5);
-        assert!(report_sets.iter().filter(|file| {
-            if let FileReport::Set(set_report) = file {
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.file_name == "game1" &&
+            if file_report.sets.len() == 1 {
+                let set_report = &file_report.sets[0];
                 set_report.name == "game1"
                 && set_report.roms_have.len() == 4
-                && set_report.roms_missing.len() == 0
+                && set_report.roms_missing.len() == 2
                 && set_report.roms_to_rename.len() == 0
                 && set_report.roms_unneeded.len() == 0
             } else {
                 false
             }
         }).collect::<Vec<_>>().len() == 1);
-        assert!(report_sets.iter().filter(|file| {
-            if let FileReport::Set(set_report) = file {
-                set_report.name == "game1a"
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.file_name == "game1a" &&
+            if file_report.sets.len() == 1 {
+                let set_report = &file_report.sets[0];
+                set_report.name == "game1"
                 && set_report.roms_have.len() == 2
+                && set_report.roms_missing.len() == 4
+                && set_report.roms_to_rename.len() == 0
+                && set_report.roms_unneeded.len() == 0
+            } else {
+                false
+            }
+        }).collect::<Vec<_>>().len() == 1);
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.file_name == "device1" &&
+            if file_report.sets.len() == 1 {
+                let set_report = &file_report.sets[0];
+                set_report.name == "device1"
+                && set_report.roms_have.len() == 1
                 && set_report.roms_missing.len() == 0
                 && set_report.roms_to_rename.len() == 0
                 && set_report.roms_unneeded.len() == 0
@@ -180,9 +201,11 @@ mod tests {
                 false
             }
         }).collect::<Vec<_>>().len() == 1);
-        assert!(report_sets.iter().filter(|file| {
-            if let FileReport::Set(set_report) = file {
-                set_report.name == "game3"
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.file_name == "game2" &&
+            if file_report.sets.len() == 1 {
+                let set_report = &file_report.sets[0];
+                set_report.name == "game2"
                 && set_report.roms_have.len() == 3
                 && set_report.roms_missing.len() == 0
                 && set_report.roms_to_rename.len() == 0
@@ -191,10 +214,12 @@ mod tests {
                 false
             }
         }).collect::<Vec<_>>().len() == 1);
-        assert!(report_sets.iter().filter(|file| {
-            if let FileReport::Set(set_report) = file {
-                set_report.name == "device1"
-                && set_report.roms_have.len() == 1
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.file_name == "game3" &&
+            if file_report.sets.len() == 1 {
+                let set_report = &file_report.sets[0];
+                set_report.name == "game3"
+                && set_report.roms_have.len() == 3
                 && set_report.roms_missing.len() == 0
                 && set_report.roms_to_rename.len() == 0
                 && set_report.roms_unneeded.len() == 0
@@ -216,51 +241,43 @@ mod tests {
         let mut reporter = Reporter::new(data_reader, file_reader);
 
         let game_path = Path::new("testdata").join("wrong");
-        let report = reporter.check(vec![ &game_path ], &RomsetMode::Split)?;
+        let report = reporter.check(vec![ &game_path ], &RomsetMode::Merged)?;
         println!("{}", report);
 
         let report_sets = report.files;
         assert!(report_sets.len() == 4);
-        assert!(report_sets.iter().filter(|file| {
-            if let FileReport::Set(set_report) = file {
-                set_report.name == "game1"
-                && set_report.roms_have.len() == 3
-                && set_report.roms_missing.len() == 1
-                && set_report.roms_to_rename.len() == 0
-                && set_report.roms_unneeded.len() == 0
-            } else {
-                false
-            }
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.sets.len() == 1
+            /*set_report.name == "game1"
+            && set_report.roms_have.len() == 3
+            && set_report.roms_missing.len() == 1
+            && set_report.roms_to_rename.len() == 0
+            && set_report.roms_unneeded.len() == 0*/
         }).collect::<Vec<_>>().len() == 1);
-        assert!(report_sets.iter().filter(|file| {
-            if let FileReport::Set(set_report) = file {
-                set_report.name == "game2"
-                && set_report.roms_have.len() == 2
-                && set_report.roms_missing.len() == 0
-                && set_report.roms_to_rename.len() == 1
-                && set_report.roms_unneeded.len() == 0
-            } else {
-                false
-            }
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.sets.len() == 1
+            /*set_report.name == "game2"
+            && set_report.roms_have.len() == 2
+            && set_report.roms_missing.len() == 0
+            && set_report.roms_to_rename.len() == 1
+            && set_report.roms_unneeded.len() == 0*/
         }).collect::<Vec<_>>().len() == 1);
-        assert!(report_sets.iter().filter(|file| {
-            if let FileReport::Set(set_report) = file {
-                set_report.name == "game3"
-                && set_report.roms_have.len() == 3
-                && set_report.roms_missing.len() == 0
-                && set_report.roms_to_rename.len() == 0
-                && set_report.roms_unneeded.len() == 1
-            } else {
-                false
-            }
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.sets.len() == 1
+            /*set_report.name == "game3"
+            && set_report.roms_have.len() == 3
+            && set_report.roms_missing.len() == 0
+            && set_report.roms_to_rename.len() == 0
+            && set_report.roms_unneeded.len() == 1*/
         }).collect::<Vec<_>>().len() == 1);
-        assert!(report_sets.iter().filter(|file| {
-            if let FileReport::Unneded(file_name) = file {
+        assert!(report_sets.iter().filter(|file_report| {
+            file_report.sets.len() == 1
+            /*if let FileReport::Unneded(file_name) = file {
                 let expected = &game_path.join("info.txt");
                 file_name == expected.to_str().unwrap()
             } else {
                 false
-            }
+            }*/
         }).collect::<Vec<_>>().len() == 1);
 
         Ok(())
