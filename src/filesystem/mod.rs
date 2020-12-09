@@ -70,7 +70,7 @@ impl FileReader {
 
                     let rom = DataFile {
                         file_type: FileType::Rom,
-                        name: Some(f.name().to_string()),
+                        name: f.name().to_string(),
                         sha1,
                         md5,
                         crc,
@@ -116,7 +116,7 @@ mod tests {
         assert!(game_set.game.name == "game1");
         assert!(game_set.roms.len() == 4);
         assert!(game_set.roms.into_iter().filter(|rom| {
-            rom.name == Some("rom1.trom".to_string())
+            rom.name == "rom1.trom".to_string()
             && rom.sha1 == Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string())
             && rom.md5 == Some("aa818fc7769cdd51149f794b0d4fbec9".to_string())
             && rom.crc == Some("1d460eee".to_string())

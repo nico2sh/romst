@@ -25,11 +25,7 @@ impl DataWriter for SysOutWriter {
 
     fn on_new_roms(&mut self, _game: Game, roms: Vec<DataFile>) -> Result<()> {
         for rom in roms {
-            let rom_name = rom.name.as_ref();
-            match rom_name {
-                Some(name) => { self.reporter.current_rom(name); }
-                None => {}
-            }
+            self.reporter.current_rom(&rom.name);
         };
         Ok(())
     }

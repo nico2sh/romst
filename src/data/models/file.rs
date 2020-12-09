@@ -26,7 +26,7 @@ impl Display for FileType {
 #[derive(Debug, Eq, Hash)]
 pub struct DataFile {
     pub file_type: FileType,
-    pub name: Option<String>,
+    pub name: String,
     pub sha1: Option<String>,
     pub md5: Option<String>,
     pub crc: Option<String>,
@@ -36,13 +36,7 @@ pub struct DataFile {
 
 impl PartialEq for DataFile {
     fn eq(&self, other: &Self) -> bool {
-        let name = match  (self.name.as_ref(), other.name.as_ref()) {
-            (Some(self_name), Some(other_name)) => {
-                self_name.eq(other_name)
-            },
-            (None, None) => true ,
-            _ => false
-        };
+        let name = self.name.eq(&other.name);
         
         // We are good just with the sha1
         match  (self.sha1.as_ref(), other.sha1.as_ref()) {
@@ -73,8 +67,8 @@ impl PartialEq for DataFile {
 impl Ord for DataFile {
     fn cmp(&self, other: &Self) -> Ordering {
         // we use the name as prefix to sort
-        let mut self_name = self.name.to_owned().unwrap_or_else(|| {"".to_string()});
-        let mut other_name = other.name.to_owned().unwrap_or_else(|| {"".to_string()});
+        let mut self_name = self.name.to_owned();
+        let mut other_name = other.name.to_owned();
 
         // We are good just with the sha1
         match  (self.sha1.as_ref(), other.sha1.as_ref()) {
@@ -111,19 +105,13 @@ impl PartialOrd for DataFile {
 }
 
 impl DataFile {
-    pub fn new(file_type: FileType) -> Self { Self { file_type, name: None, sha1: None, md5: None, crc: None, size: None, status: None } }
+    pub fn new(file_type: FileType, name: String) -> Self { Self { file_type, name, sha1: None, md5: None, crc: None, size: None, status: None } }
 
     /// Compares two files with the requested info, if the info is not available in either file, the comparation is ignored
     pub fn deep_compare(&self, other: &Self, file_checks: FileChecks, include_name: bool) -> Result<bool> {
         let mut compared = false;
         let mut result = if include_name {
-            match (self.name.as_ref(), other.name.as_ref()) {
-                (Some(self_name), Some(other_name)) => {
-                    self_name.eq(other_name)
-                },
-                (None, None) => true ,
-                _ => false
-            }
+            self.name.eq(&other.name)
         } else {
             true
         };
@@ -181,9 +169,8 @@ impl DataFile {
 impl Display for DataFile {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut rom_data = vec![];
-        if let Some(name) = &self.name {
-            rom_data.push(format!("name: {}", name));
-        }
+        rom_data.push(format!("name: {}", self.name));
+
         if let Some(sha1) = &self.sha1 {
             rom_data.push(format!("sha1: {}", sha1))
         }

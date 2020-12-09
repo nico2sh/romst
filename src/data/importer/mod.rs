@@ -310,11 +310,11 @@ fn process_attributes<F>(attributes: Attributes, mut f: F) where F: FnMut(&str, 
 }
 
 fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<DataFile> {
-    let mut data_file = DataFile::new(file_type);
+    let mut data_file = DataFile::new(file_type, "".to_string());
 
     process_attributes(attributes, |key, value| {
         match key {
-            "name" => data_file.name = Some(String::from(value)),
+            "name" => data_file.name = String::from(value),
             "sha1" => data_file.sha1 = Some(String::from(value)),
             "md5" => data_file.md5 = Some(String::from(value)),
             "crc" => data_file.crc = Some(String::from(value)),
@@ -325,7 +325,12 @@ fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<D
         }
     });
 
-    Ok(data_file)
+    if data_file.name.eq("") {
+        error!("Found file without name, not adding");
+        err!(RomstError::ParsingError { message: "File without name".to_string() })
+    } else {
+        Ok(data_file)
+    }
 }
 
 fn game_from_attributes(attributes: Attributes) -> Result<Game> {

@@ -70,7 +70,6 @@ pub struct SetReport {
     pub roms_have: Vec<DataFile>,
     pub roms_to_rename: Vec<FileRename>,
     pub roms_missing: Vec<DataFile>,
-    pub roms_unneeded: Vec<DataFile>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -106,12 +105,11 @@ impl SetReport {
             roms_have: vec![],
             roms_to_rename: vec![],
             roms_missing: vec![],
-            roms_unneeded: vec![],
         }
     }
 
     pub fn from_data(name: String, roms_have: Vec<DataFile>, roms_to_rename: Vec<FileRename>, roms_missing: Vec<DataFile>, roms_unneeded: Vec<DataFile>) -> Self {
-        Self { name, roms_have, roms_to_rename, roms_missing, roms_unneeded }
+        Self { name, roms_have, roms_to_rename, roms_missing }
     }
 
     pub fn add_having(&mut self, rom: DataFile) {
@@ -146,13 +144,6 @@ impl Display for SetReport {
             output.push_str("\nMissing:");
             for missing in self.roms_missing.as_slice() {
                 output.push_str(&format!("\n    - {}", missing));
-            }
-        }
-
-        if self.roms_unneeded.len() > 0 {
-            output.push_str("\nUnneeded:");
-            for unneeded in self.roms_unneeded.as_slice() {
-                output.push_str(&format!("\n    - {}", unneeded));
             }
         }
 

@@ -96,54 +96,49 @@ impl <'d> DBWriter<'d> {
         let mut roms_to_insert = vec![];
 
         for rom in roms {
-            match rom.name.to_owned() {
-                None => { error!("Rom without a name, not adding it.") },
-                Some(rom_name) => {
-                    let mut params: Vec<&dyn ToSql> = vec![];
-                    let mut statement_where = vec![];
-                    let mut param_num = 1;
-                    if rom.sha1.is_some() {
-                        params.push(rom.sha1.as_ref().unwrap());
-                        statement_where.push(format!("sha1 = ?{}", param_num));
-                        param_num = param_num + 1;
-                    }
-                    
-                    if rom.md5.is_some() {
-                        params.push(rom.md5.as_ref().unwrap());
-                        statement_where.push(format!("md5 = ?{}", param_num));
-                        param_num = param_num + 1;
-                    }
-
-                    if rom.crc.is_some() {
-                        params.push(rom.crc.as_ref().unwrap());
-                        statement_where.push(format!("crc = ?{}", param_num));
-                        param_num = param_num + 1;
-                    }
-
-                    if rom.size.is_some() {
-                        params.push(rom.size.as_ref().unwrap());
-                        statement_where.push(format!("size = ?{}", param_num));
-                    }
-
-                    let statement = "SELECT id FROM roms WHERE ".to_string() +
-                        &statement_where.join(" AND ") + ";";
-
-                    let mut rom_stmt = self.conn.prepare_cached(&statement)?;
-                    let rom_result: rusqlite::Result<u32> = rom_stmt.query_row(params, |row| {
-                        Ok(row.get(0)?)
-                    });
-
-                    match rom_result {
-                        Err(rusqlite::Error::QueryReturnedNoRows) => {
-                            roms_to_insert.push(rom);
-                        },
-                        Ok(id) => {
-                            rom_name_pair.push((id, rom_name));
-                        },
-                        Err(e) => error!("Error adding a rom: {}", e),
-                    };
-                }
+            let mut params: Vec<&dyn ToSql> = vec![];
+            let mut statement_where = vec![];
+            let mut param_num = 1;
+            if rom.sha1.is_some() {
+                params.push(rom.sha1.as_ref().unwrap());
+                statement_where.push(format!("sha1 = ?{}", param_num));
+                param_num = param_num + 1;
             }
+            
+            if rom.md5.is_some() {
+                params.push(rom.md5.as_ref().unwrap());
+                statement_where.push(format!("md5 = ?{}", param_num));
+                param_num = param_num + 1;
+            }
+
+            if rom.crc.is_some() {
+                params.push(rom.crc.as_ref().unwrap());
+                statement_where.push(format!("crc = ?{}", param_num));
+                param_num = param_num + 1;
+            }
+
+            if rom.size.is_some() {
+                params.push(rom.size.as_ref().unwrap());
+                statement_where.push(format!("size = ?{}", param_num));
+            }
+
+            let statement = "SELECT id FROM roms WHERE ".to_string() +
+                &statement_where.join(" AND ") + ";";
+
+            let mut rom_stmt = self.conn.prepare_cached(&statement)?;
+            let rom_result: rusqlite::Result<u32> = rom_stmt.query_row(params, |row| {
+                Ok(row.get(0)?)
+            });
+
+            match rom_result {
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    roms_to_insert.push(rom);
+                },
+                Ok(id) => {
+                    rom_name_pair.push((id, rom.name));
+                },
+                Err(e) => error!("Error adding a rom: {}", e),
+            };
         }
 
         let mut rom_row_id = self.ids.rom;
@@ -154,7 +149,7 @@ impl <'d> DBWriter<'d> {
                 "INSERT INTO roms (id, sha1, md5, crc, size, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6);",
                 params![ rom_row_id, rom.sha1, rom.md5, rom.crc, rom.size, rom.status ])
                 .and_then(|i| {
-                    rom_name_pair.push((rom_row_id, rom.name.to_owned().unwrap()));
+                    rom_name_pair.push((rom_row_id, rom.name));
                     rom_row_id = rom_row_id + i as u32;
                     Ok(())
                 })?;

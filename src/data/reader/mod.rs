@@ -7,6 +7,27 @@ use crate::RomsetMode;
 use super::models::{file::DataFile, game::Game, set::GameSet};
 use anyhow::Result;
 
+#[derive(Debug)]
+pub struct RomSearch {
+    pub set_results: HashMap<String, HashSet<DataFile>>,
+    pub unknowns: Vec<DataFile>
+}
+
+impl RomSearch {
+    pub fn new() -> Self { Self { set_results: HashMap::new(), unknowns: vec![] } }
+    pub fn add_file_for_set(&mut self, set_name: String, file: DataFile) {
+        self.set_results.entry(set_name).or_insert(HashSet::new()).insert(file);
+    }
+    pub fn add_file_unknown(&mut self, file: DataFile) {
+        self.unknowns.push(file);
+    }
+}
+
+pub struct SetResult {
+    pub set_name: String,
+    pub files: Vec<DataFile>
+}
+
 pub trait DataReader {
     fn get_game(&self, game_name: &String) -> Option<Game>;
     fn get_romset_roms(&self, game_name: &String, rom_mode: &RomsetMode) -> Result<Vec<DataFile>>;
@@ -23,5 +44,5 @@ pub trait DataReader {
     /// This is useful to know what new (incomplete though) sets can be generated from the current one
     fn get_romset_shared_roms(&self, game_name: &String) -> Result<HashMap<String, Vec<String>>>;
 
-    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) -> Result<HashMap<String, HashSet<DataFile>>>;
+    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) -> Result<RomSearch>;
 }

@@ -83,7 +83,7 @@ impl<R: DataReader> Reporter<R> {
 
         let rom_usage_result = self.data_reader.get_romsets_from_roms(game_set.roms, rom_mode)?;
 
-        for entry in rom_usage_result {
+        for entry in rom_usage_result.set_results {
             let set_name = entry.0;
             let roms = entry.1;
 
@@ -91,6 +91,10 @@ impl<R: DataReader> Reporter<R> {
 
             file_report.add_set(set_report);
         };
+
+        for unknown in rom_usage_result.unknowns {
+            file_report.add_unknown(unknown.name);
+        }
 
         Ok(file_report)
     }
@@ -105,20 +109,18 @@ impl<R: DataReader> Reporter<R> {
                 rom.deep_compare(&set_rom, FileChecks::ALL, false).ok().unwrap_or_else(|| false)
             });
 
-            let rom_name = rom.name.to_owned().unwrap_or_else(|| {"".to_string()});
             match found_rom {
                 Some(set_rom_pos) => {
                     let set_rom = db_roms.remove(set_rom_pos);
-                    let set_rom_name = set_rom.name.to_owned().unwrap_or_else(|| {"".to_string()});
-                    if rom_name == set_rom_name {
+                    if rom.name == set_rom.name {
                         report.roms_have.push(set_rom);
                     } else {
-                        let file_rename = FileRename::new(rom, set_rom_name);
+                        let file_rename = FileRename::new(rom, set_rom.name);
                         report.roms_to_rename.push(file_rename);
                     }
                 }
                 None => {
-                    report.roms_unneeded.push(rom);
+                    warn!("Rom `{}` couldn't be matched", rom);
                 }
             }
         });
@@ -150,19 +152,23 @@ mod tests {
 
     fn assert_file_report(report: &Report, file_name: &str, report_name: &str, roms_have: usize, roms_missing: usize, roms_to_rename: usize, roms_unneeded: usize) {
         let report_sets = &report.files;
-        assert!(report_sets.iter().filter(|file_report| {
+        let assert_result = report_sets.iter().filter(|file_report| {
             file_report.file_name == file_name &&
+            file_report.unknown.len() == roms_unneeded &&
             if file_report.sets.len() == 1 {
                 let set_report = &file_report.sets[0];
                 set_report.name == report_name
                 && set_report.roms_have.len() == roms_have
                 && set_report.roms_missing.len() == roms_missing
                 && set_report.roms_to_rename.len() == roms_to_rename
-                && set_report.roms_unneeded.len() == roms_unneeded
             } else {
                 false
             }
-        }).collect::<Vec<_>>().len() == 1);
+        }).collect::<Vec<_>>().len() == 1;
+        if !assert_result {
+            println!("Test failed with asserting report:\n{}", report);
+        }
+        assert!(assert_result);
     }
 
     #[test]
@@ -199,7 +205,6 @@ mod tests {
 
         let game_path = Path::new("testdata").join("wrong");
         let report = reporter.check(vec![ &game_path ], &RomsetMode::Split)?;
-        println!("{}", report);
 
         tests::assert_file_report(&report, "game1", "game1", 3, 1, 0, 0);
         tests::assert_file_report(&report, "game2", "game2", 2, 0, 1, 0);
