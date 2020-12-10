@@ -1,12 +1,13 @@
 use std::{cmp::Ordering, fmt::{self, Display}};
 use std::cmp::Ord;
+use serde::{Deserialize, Serialize};
 
 use filesystem::FileChecks;
 use anyhow::Result;
 
 use crate::{error::RomstError, err, filesystem};
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FileType {
     Rom,
     Disk,
@@ -23,7 +24,7 @@ impl Display for FileType {
     }
 }
 
-#[derive(Debug, Eq, Hash)]
+#[derive(Debug, Eq, Hash, Serialize, Deserialize)]
 pub struct DataFile {
     pub file_type: FileType,
     pub name: String,

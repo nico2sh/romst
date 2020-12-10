@@ -1,8 +1,8 @@
 use std::fmt::{self, Display};
-
+use serde::{Deserialize, Serialize};
 use crate::data::models::file::DataFile;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Report {
     pub files: Vec<FileReport>,
 }
@@ -29,7 +29,7 @@ impl Display for Report {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileReport {
     pub file_name: String,
     pub sets: Vec<SetReport>,
@@ -64,7 +64,7 @@ impl Display for FileReport {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SetReport {
     pub name: String,
     pub roms_have: Vec<DataFile>,
@@ -88,7 +88,7 @@ impl SetNameReport {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FileRename {
     pub from: DataFile,
     pub to: String,

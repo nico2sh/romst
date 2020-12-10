@@ -5,7 +5,7 @@ mod macros;
 mod sysout;
 
 use console::Style;
-use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter};
+use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter, reader::RomSearch};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
 use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, str::FromStr};
@@ -104,15 +104,15 @@ impl Romst {
         Ok(games)
     }
 
-    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String) -> Result<HashMap<String, Vec<String>>> {
+    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String, rom_mode: &RomsetMode) -> Result<RomSearch> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
-        reader.find_rom_usage(&game_name, &rom_name)
+        reader.find_rom_usage(&game_name, &rom_name, rom_mode)
     }
 
-    pub fn get_romset_usage(db_file: String, game_name: String) -> Result<HashMap<String, Vec<String>>> {
+    pub fn get_romset_usage(db_file: String, game_name: String, rom_mode: &RomsetMode) -> Result<RomSearch> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
-        reader.get_romset_shared_roms(&game_name)
+        reader.get_romset_shared_roms(&game_name, rom_mode)
     }
 }

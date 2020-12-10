@@ -1,6 +1,5 @@
 pub mod sqlite;
 pub mod sysout;
-pub mod memory;
 
 use anyhow::Result;
 

@@ -1,6 +1,6 @@
 pub mod sqlite;
 
-use std::collections::{HashMap, HashSet};
+use std::{fmt::Display, collections::{HashMap, HashSet}};
 
 use crate::RomsetMode;
 
@@ -11,6 +11,32 @@ use anyhow::Result;
 pub struct RomSearch {
     pub set_results: HashMap<String, HashSet<DataFile>>,
     pub unknowns: Vec<DataFile>
+}
+
+impl Display for RomSearch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.set_results.len() > 0 {
+            for game_roms in &self.set_results {
+                writeln!(f, "Set: {}", game_roms.0)?;
+                let roms = game_roms.1;
+                if roms.len() > 0 {
+                    writeln!(f, "  Roms:")?;
+                    for rom in roms {
+                        writeln!(f, "   - {}", rom)?;
+                    }
+                }
+            }
+        }
+
+        if self.unknowns.len() > 0 {
+            writeln!(f, "  Unkown files:")?;
+            for unknown in &self.unknowns {
+                writeln!(f, "   - {}", unknown)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl RomSearch {
@@ -39,10 +65,10 @@ pub trait DataReader {
         Ok(game_set)
     }
     /// Finds where this rom is included, in other games. Returns the games and the name used for that rom
-    fn find_rom_usage(&self, game_name: &String, rom_name: &String) -> Result<HashMap<String, Vec<String>>>;
+    fn find_rom_usage(&self, game_name: &String, rom_name: &String, rom_mode: &RomsetMode) -> Result<RomSearch>;
     /// Gets all romsets that include roms in the searched game
     /// This is useful to know what new (incomplete though) sets can be generated from the current one
-    fn get_romset_shared_roms(&self, game_name: &String) -> Result<HashMap<String, Vec<String>>>;
+    fn get_romset_shared_roms(&self, game_name: &String, rom_mode: &RomsetMode) -> Result<RomSearch>;
 
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) -> Result<RomSearch>;
 }

@@ -49,6 +49,8 @@ struct RomUsage {
     game: String,
     #[clap(short, long, about = "The romname to search, if empty, Romst will list all the roms present in the romset.")]
     rom: Option<String>,
+    #[clap(short, long, about = "Sets the romset mode, can be either `merge`, `non-merged` or `split`")]
+    set_mode: RomsetMode,
 }
 
 fn main() {
@@ -90,23 +92,19 @@ fn main() {
             let db_file = ru.db;
             let game_name = ru.game;
             let rom_name = ru.rom;
+            let set_mode = ru.set_mode;
             let execution = match rom_name {
                 Some(rom) => {
-                    Romst::get_rom_usage(db_file, game_name, rom)
+                    Romst::get_rom_usage(db_file, game_name, rom, &set_mode)
                 }
                 None => { 
-                    Romst::get_romset_usage(db_file, game_name)
+                    Romst::get_romset_usage(db_file, game_name, &set_mode)
                  }
             };
 
             match execution {
                 Ok(result) => {
-                    for entry in result.into_iter() {
-                        println!("{}", Style::new().green().apply_to(entry.0));
-                        for rom in entry.1.into_iter() {
-                            println!("    - {}", rom);
-                        }
-                    }
+                    println!("{}", result);
                 }
                 Err(e) => { println!("{} getting roms info.\n{}",
                     Style::new().red().apply_to("ERROR"),

@@ -161,7 +161,7 @@ impl <'d> DBReader <'d>{
         let mut roms_stmt = self.conn.prepare(&query)?;
         let roms_rows = roms_stmt.query_map(params, |row| {
             let mut data_file = DataFile::new(FileType::Rom, "".to_string());
-            let rom_id = row.get(9)?;
+            let rom_id: u32 = row.get(9)?;
             let name = match rom_ids.as_slice().into_iter().find(|p| { p.0 == rom_id }) {
                 Some(result) => {
                     let data_file = &result.1;
@@ -251,47 +251,24 @@ impl <'d> DataReader for DBReader<'d> {
         self.get_set_roms(game_name.to_owned(), rom_mode)
     }
 
-    fn find_rom_usage(&self, game_name: &String, rom_name: &String) -> Result<HashMap<String, Vec<String>>> {
-        let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.game_name, game_roms.name as romname
-            FROM game_roms 
-                WHERE game_roms.rom_id = (SELECT game_roms.rom_id FROM game_roms 
-                WHERE game_roms.game_name = ?1 AND game_roms.name = ?2) ORDER BY game_roms.game_name;
-        ")?;
-        let roms_rows = roms_stmt.query_map(params![ game_name, rom_name ], |row| {
-            Ok((row.get(0)?,
-                row.get(1)?))
-        })?.filter_map(|row| row.ok());
+    fn find_rom_usage(&self, game_name: &String, rom_name: &String, rom_mode: &RomsetMode) -> Result<RomSearch> {
+        let game_roms = self.get_set_roms(game_name.to_owned(), rom_mode)?;
+        
+        let roms = game_roms.into_iter().filter(|rom| {
+            rom.name.eq(rom_name)
+        }).collect();
 
-        let mut result: HashMap<String, Vec<String>> = HashMap::new();
-        for item in roms_rows {
-            let game_name = item.0;
-            let rom_name = item.1;
+        let rom_ids = self.get_rom_ids_from_files(roms)?.found;
 
-            result.entry(game_name).or_insert(vec![]).push(rom_name);
-        }
-
-        Ok(result)
+        self.find_sets_for_roms(rom_ids, rom_mode)
     }
 
-    fn get_romset_shared_roms(&self, game_name: &String) -> Result<HashMap<String, Vec<String>>> {
-        let mut roms_stmt = self.conn.prepare("SELECT DISTINCT game_roms.game_name, game_roms.name as romname
-            FROM game_roms WHERE game_roms.rom_id IN (SELECT game_roms.rom_id FROM game_roms 
-                WHERE game_roms.game_name = ?1) ORDER BY game_roms.game_name;
-        ")?;
-        let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
-            Ok((row.get(0)?,
-                row.get(1)?))
-        })?.filter_map(|row| row.ok());
+    fn get_romset_shared_roms(&self, game_name: &String, rom_mode: &RomsetMode) -> Result<RomSearch> {
+        let game_roms = self.get_set_roms(game_name.to_owned(), rom_mode)?;
 
-        let mut result: HashMap<String, Vec<String>> = HashMap::new();
-        for item in roms_rows {
-            let game_name = item.0;
-            let rom_name = item.1;
+        let rom_ids = self.get_rom_ids_from_files(game_roms)?.found;
 
-            result.entry(game_name).or_insert(vec![]).push(rom_name);
-        }
-
-        Ok(result)
+        self.find_sets_for_roms(rom_ids, rom_mode)
     }
 
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) -> Result<RomSearch> {

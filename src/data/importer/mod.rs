@@ -1,5 +1,5 @@
 
-use std::{fs::File, path::PathBuf, fs, io::{BufRead, BufReader}, path::Path, str};
+use std::{fs::File, fs, io::{BufRead, BufReader}, path::Path, str};
 use log::{debug, error, info};
 use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
@@ -19,17 +19,6 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
         let reporter = DatImporterReporter::new(file_size);
         DatImporter {
             reader: Reader::from_file(path).unwrap(),
-            writer,
-            reporter,
-        }
-    }
-
-    pub fn from_string(xml: &str, writer: W) -> DatImporter<&[u8], W> {
-        let file_size = xml.len();
-        let reporter = DatImporterReporter::new(file_size as u64);
-
-        DatImporter {
-            reader: Reader::from_str(xml),
             writer,
             reporter,
         }
@@ -355,95 +344,65 @@ fn game_from_attributes(attributes: Attributes) -> Result<Game> {
 
 #[cfg(test)]
 mod tests {
-    const XML: &str = r#"<datafile>
-        <header>
-        </header>
-        <machine name="circus" sourcefile="circus.cpp">
-            <description>Circus / Acrobat TV</description>
-            <year>1977</year>
-            <manufacturer>Exidy / Taito</manufacturer>
-            <rom name="9000.1c" size="512" crc="1f954bb3" sha1="62a958b48078caa639b96f62a690583a1c8e83f5"/>
-            <rom name="9001.2c" size="512" crc="361da7ee" sha1="6e6fe5b37ccb4c11aa4abbd9b7df772953abfe7e"/>
-            <rom name="9002.3c" size="512" crc="30d72ef5" sha1="45fc8285e213bf3906a26205a8c0b22f311fd6c3"/>
-            <rom name="9003.4c" size="512" crc="6efc315a" sha1="d5a4a64a901853fff56df3c65512afea8336aad2"/>
-            <rom name="9004.1a" size="512" crc="7654ea75" sha1="fa29417618157002b8ecb21f4c15104c8145a742"/>
-            <rom name="9005.2a" size="512" crc="b8acdbc5" sha1="634bb11089f7a57a316b6829954cc4da4523f267"/>
-            <rom name="9006.3a" size="512" crc="901dfff6" sha1="c1f48845456e88d54981608afd00ddb92d97da99"/>
-            <rom name="9007.5a" size="512" crc="9dfdae38" sha1="dc59a5f90a5a49fa071aada67eda768d3ecef010"/>
-            <rom name="9008.6a" size="512" crc="c8681cf6" sha1="681cfea75bee8a86f9f4645e6c6b94b44762dae9"/>
-            <rom name="9009.7a" size="512" crc="585f633e" sha1="46133409f42e8cbc095dde576ce07d97b235972d"/>
-            <rom name="9010.8a" size="512" crc="69cc409f" sha1="b77289e62313e8535ce40686df7238aa9c0035bc"/>
-            <rom name="9011.9a" size="512" crc="aff835eb" sha1="d6d95510d4a046f48358fef01103bcc760eb71ed"/>
-            <rom name="9012.14d" size="512" crc="2fde3930" sha1="a21e2d342f16a39a07edf4bea8d698a52216ecba"/>
-            <rom name="dm74s570-d4.4d" size="512" crc="aad8da33" sha1="1d60a6b75b94f5be5bad190ef56e9e3da20bf81a" status="baddump"/>
-            <rom name="dm74s570-d5.5d" size="512" crc="ed2493fa" sha1="57ee357b68383b0880bfa385820605bede500747" status="baddump"/>
-            <device_ref name="m6502"/>
-            <device_ref name="screen"/>
-            <device_ref name="gfxdecode"/>
-            <device_ref name="palette"/>
-            <device_ref name="speaker"/>
-            <device_ref name="samples"/>
-            <device_ref name="discrete"/>
-            <sample name="bounce"/>
-            <sample name="miss"/>
-            <sample name="pop"/>
-            <driver status="imperfect"/>
-	    </machine>
-        <machine name="robotbwl" sourcefile="circus.cpp">
-            <description>Robot Bowl</description>
-            <year>1977</year>
-            <manufacturer>Exidy</manufacturer>
-            <rom name="4010.4c" size="512" crc="a5f7acb9" sha1="556dd34d0fa50415b128477e208e96bf0c050c2c"/>
-            <rom name="4011.3c" size="512" crc="d5380c9b" sha1="b9670e87011a1b3aebd1d386f1fe6a74f8c77be9"/>
-            <rom name="4012.2c" size="512" crc="47b3e39c" sha1="393c680fba3bd384e2c773150c3bae4d735a91bf"/>
-            <rom name="4013.1c" size="512" crc="b2991e7e" sha1="32b6d42bb9312d6cbe5b4113fcf2262bfeef3777"/>
-            <rom name="4020.1a" size="512" crc="df387a0b" sha1="97291f1a93cbbff987b0fbc16c2e87ad0db96e12"/>
-            <rom name="4021.2a" size="512" crc="c948274d" sha1="1bf8c6e994d601d4e6d30ca2a9da97e140ff5eee"/>
-            <rom name="4022.3a" size="512" crc="8fdb3ec5" sha1="a9290edccb8f75e7ec91416d46617516260d5944"/>
-            <rom name="4023.5a" size="512" crc="ba9a6929" sha1="9cc6e85431b5d82bf3a624f7b35ddec399ad6c80"/>
-            <rom name="4024.6a" size="512" crc="16fd8480" sha1="935bb0c87d25086f326571c83f94f831b1a8b036"/>
-            <rom name="4025.7a" size="512" crc="4cadbf06" sha1="380c10aa83929bfbfd89facb252e68c307545755"/>
-            <rom name="4026a.8a" size="512" crc="bc809ed3" sha1="2bb4cdae8c9619eebea30cc323960a46a509bb58"/>
-            <rom name="4027b.9a" size="512" crc="07487e27" sha1="b5528fb3fec474df2b66f36e28df13a7e81f9ce3"/>
-            <rom name="5000.4d" size="32" status="nodump"/>
-            <rom name="5001.5d" size="32" status="nodump"/>
-            <rom name="6000.14d" size="32" crc="a402ac06" sha1="3bd75630786bcc86d9e9fbc826adc909eef9b41f"/>
-            <device_ref name="m6502"/>
-            <device_ref name="screen"/>
-            <device_ref name="gfxdecode"/>
-            <device_ref name="palette"/>
-            <device_ref name="speaker"/>
-            <device_ref name="samples"/>
-            <device_ref name="discrete"/>
-            <sample name="balldrop"/>
-            <sample name="demerit"/>
-            <sample name="hit"/>
-            <sample name="reward"/>
-            <sample name="roll"/>
-            <driver status="imperfect"/>
-        </machine>
-        </datafile>
-        "#;
+    use std::{rc::Rc, cell::RefCell};
 
-    use rusqlite::Connection;
+    use rusqlite::{Connection, OpenFlags};
 
-    use crate::data::writer::{memory::MemoryWriter, sysout::SysOutWriter};
+    use crate::data::writer::{sqlite::DBWriter};
 
     use super::*;
 
+    pub struct MemoryWriter {
+        pub initialized: Rc<RefCell<bool>>,
+        pub games: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl MemoryWriter {
+        pub fn new() -> Self {
+            MemoryWriter {
+                initialized: Rc::new(RefCell::new(false)),
+                games: Rc::new(RefCell::new(vec![])),
+            }
+        }
+    }
+
+    impl DataWriter for MemoryWriter {
+        fn init(&self) -> Result<()> {
+            self.initialized.replace(true);
+            Ok(())
+        }
+
+        fn on_new_game(&mut self, game: Game) -> Result<()> {
+            self.games.borrow_mut().push(game.name);
+            Ok(())
+        }
+
+        fn on_new_roms(&mut self, game: Game, roms: Vec<DataFile>) -> Result<()> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<()> {
+            Ok(())
+        }
+    }
+
     #[test]
     fn read_xml() -> Result<()> {
-        let db = Connection::open_in_memory()?;
-
-        let writer = MemoryWriter::new();
+        let mut conn = Connection::open_in_memory_with_flags(OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
+        let writer = DBWriter::from_connection(&mut conn, 100);
         writer.init()?;
+        let writer = MemoryWriter::new();
+        let games = Rc::clone(&writer.games);
+        let initialized = Rc::clone(&writer.initialized);
 
-        let mut dat_reader: DatImporter<&[u8], SysOutWriter> =
-            DatImporter::<BufReader<File>, SysOutWriter>::from_string(XML, SysOutWriter::new());
+        writer.init()?;
+        let path = Path::new("testdata").join("test.dat");
+        let mut importer = DatImporter::<BufReader<File>, MemoryWriter>::from_path(&path, writer);
+        importer.load_dat()?;
         
-        dat_reader.load_dat()?;
+        assert!(*initialized.borrow());
 
-        assert!(true);
+        println!("{:?}", *games.borrow());
         
         Ok(())
     }
