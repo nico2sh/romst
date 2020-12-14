@@ -6,6 +6,7 @@ use crate::RomsetMode;
 
 use super::models::{file::DataFile, game::Game, set::GameSet};
 use anyhow::Result;
+use console::Style;
 
 #[derive(Debug)]
 pub struct RomSearch {
@@ -17,10 +18,10 @@ impl Display for RomSearch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.set_results.len() > 0 {
             for game_roms in &self.set_results {
-                writeln!(f, "Set: {}", game_roms.0)?;
+                writeln!(f, "Set: {}", Style::new().green().bold().apply_to(game_roms.0))?;
                 let roms = game_roms.1;
                 if roms.len() > 0 {
-                    writeln!(f, "  Roms:")?;
+                    writeln!(f, "  {}:", Style::new().cyan().apply_to("Roms"))?;
                     for rom in roms {
                         writeln!(f, "   - {}", rom)?;
                     }
@@ -29,7 +30,7 @@ impl Display for RomSearch {
         }
 
         if self.unknowns.len() > 0 {
-            writeln!(f, "  Unkown files:")?;
+            writeln!(f, "  {}:", Style::new().red().apply_to("Unkown files"))?;
             for unknown in &self.unknowns {
                 writeln!(f, "   - {}", unknown)?;
             }
@@ -47,11 +48,6 @@ impl RomSearch {
     pub fn add_file_unknown(&mut self, file: DataFile) {
         self.unknowns.push(file);
     }
-}
-
-pub struct SetResult {
-    pub set_name: String,
-    pub files: Vec<DataFile>
 }
 
 pub trait DataReader {
