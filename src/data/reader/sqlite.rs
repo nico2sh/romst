@@ -50,7 +50,7 @@ impl <'d> DBReader <'d>{
         Self { conn }
     }
 
-    fn get_set_roms(&self, game_name: String, rom_mode: &RomsetMode) -> Result<Vec<DataFile>> {
+    fn get_set_roms(&self, game_name: String, rom_mode: RomsetMode) -> Result<Vec<DataFile>> {
         let mut query = ROMS_QUERY.to_string();
         match rom_mode {
             RomsetMode::Merged => {
@@ -142,7 +142,7 @@ impl <'d> DBReader <'d>{
         Ok(result)
     }
 
-    fn find_sets_for_roms(&self, rom_ids: Vec<(u32, DataFile)>, rom_mode: &RomsetMode) -> Result<RomSearch> {
+    fn find_sets_for_roms(&self, rom_ids: Vec<(u32, DataFile)>, rom_mode: RomsetMode) -> Result<RomSearch> {
         let mut params: Vec<&dyn ToSql> = vec![];
         let mut ids_cond = String::new();
         let mut i = 0;
@@ -247,11 +247,11 @@ impl <'d> DataReader for DBReader<'d> {
         }
     }
 
-    fn get_romset_roms(&self, game_name: &String, rom_mode: &RomsetMode) -> Result<Vec<DataFile>> {
+    fn get_romset_roms(&self, game_name: &String, rom_mode: RomsetMode) -> Result<Vec<DataFile>> {
         self.get_set_roms(game_name.to_owned(), rom_mode)
     }
 
-    fn find_rom_usage(&self, game_name: &String, rom_name: &String, rom_mode: &RomsetMode) -> Result<RomSearch> {
+    fn find_rom_usage(&self, game_name: &String, rom_name: &String, rom_mode: RomsetMode) -> Result<RomSearch> {
         let game_roms = self.get_set_roms(game_name.to_owned(), rom_mode)?;
         
         let roms = game_roms.into_iter().filter(|rom| {
@@ -263,7 +263,7 @@ impl <'d> DataReader for DBReader<'d> {
         self.find_sets_for_roms(rom_ids, rom_mode)
     }
 
-    fn get_romset_shared_roms(&self, game_name: &String, rom_mode: &RomsetMode) -> Result<RomSearch> {
+    fn get_romset_shared_roms(&self, game_name: &String, rom_mode: RomsetMode) -> Result<RomSearch> {
         let game_roms = self.get_set_roms(game_name.to_owned(), rom_mode)?;
 
         let rom_ids = self.get_rom_ids_from_files(game_roms)?.found;
@@ -271,7 +271,7 @@ impl <'d> DataReader for DBReader<'d> {
         self.find_sets_for_roms(rom_ids, rom_mode)
     }
 
-    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: &RomsetMode) -> Result<RomSearch> {
+    fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch> {
         let mut search_rom_ids_result = self.get_rom_ids_from_files(roms)?;
 
         let mut rom_search = self.find_sets_for_roms(search_rom_ids_result.found, rom_mode)?;
@@ -303,7 +303,7 @@ mod tests {
         let conn = get_db_connection(&path)?;
         let data_reader = DBReader::from_connection(&conn);
 
-        let data_files = data_reader.get_romset_roms(&"game1".to_string(), &RomsetMode::Merged)?;
+        let data_files = data_reader.get_romset_roms(&"game1".to_string(), RomsetMode::Merged)?;
         assert!(data_files.len() == 6);
         assert!(data_files.iter().find(|f| { f.name == "rom1.trom".to_string()} ).is_some());
         assert!(data_files.iter().find(|f| { f.name == "rom2.trom".to_string()} ).is_some());
@@ -312,14 +312,14 @@ mod tests {
         assert!(data_files.iter().find(|f| { f.name == "rom5.trom".to_string()} ).is_some());
         assert!(data_files.iter().find(|f| { f.name == "binfil1.bin".to_string()} ).is_some());
 
-        let data_files = data_reader.get_romset_roms(&"game1".to_string(), &RomsetMode::NonMerged)?;
+        let data_files = data_reader.get_romset_roms(&"game1".to_string(), RomsetMode::NonMerged)?;
         assert!(data_files.len() == 4);
         assert!(data_files.iter().find(|f| { f.name == "rom1.trom".to_string()} ).is_some());
         assert!(data_files.iter().find(|f| { f.name == "rom2.trom".to_string()} ).is_some());
         assert!(data_files.iter().find(|f| { f.name == "rom3.trom".to_string()} ).is_some());
         assert!(data_files.iter().find(|f| { f.name == "binfil1.bin".to_string()} ).is_some());
 
-        let data_files = data_reader.get_romset_roms(&"game1a".to_string(), &RomsetMode::Split)?;
+        let data_files = data_reader.get_romset_roms(&"game1a".to_string(), RomsetMode::Split)?;
         assert!(data_files.len() == 2);
         assert!(data_files.iter().find(|f| { f.name == "rom4.trom".to_string()} ).is_some());
         assert!(data_files.iter().find(|f| { f.name == "rom5.trom".to_string()} ).is_some());
@@ -342,7 +342,7 @@ mod tests {
         rom2.crc = Some("dc20b010".to_string());
         roms.push(rom2);
 
-        let rom_sets = data_reader.get_romsets_from_roms(roms, &RomsetMode::Merged)?;
+        let rom_sets = data_reader.get_romsets_from_roms(roms, RomsetMode::Merged)?;
         println!("{:?}", rom_sets);
 
         let stats = data_reader.get_stats()?;

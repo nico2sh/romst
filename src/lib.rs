@@ -9,10 +9,12 @@ use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBRea
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
 use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, str::FromStr};
+use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
 pub const DEFAULT_WRITE_BUFFER_SIZE: u16 = 1000;
 
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub enum RomsetMode {
     Merged,
     NonMerged,
@@ -90,7 +92,7 @@ impl Romst {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         for game_name in game_names {
-            let roms = reader.get_romset_roms(&game_name, &rom_mode)?;
+            let roms = reader.get_romset_roms(&game_name, rom_mode)?;
             match reader.get_game(&game_name) {
                 Some(game) => {
                     games.push(GameSet::new(game, roms, vec![], vec![]));
@@ -104,13 +106,13 @@ impl Romst {
         Ok(games)
     }
 
-    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String, rom_mode: &RomsetMode) -> Result<RomSearch> {
+    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String, rom_mode: RomsetMode) -> Result<RomSearch> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.find_rom_usage(&game_name, &rom_name, rom_mode)
     }
 
-    pub fn get_romset_usage(db_file: String, game_name: String, rom_mode: &RomsetMode) -> Result<RomSearch> {
+    pub fn get_romset_usage(db_file: String, game_name: String, rom_mode: RomsetMode) -> Result<RomSearch> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.get_romset_shared_roms(&game_name, rom_mode)

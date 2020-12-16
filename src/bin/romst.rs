@@ -95,10 +95,10 @@ fn main() {
             let set_mode = ru.set_mode;
             let execution = match rom_name {
                 Some(rom) => {
-                    Romst::get_rom_usage(db_file, game_name, rom, &set_mode)
+                    Romst::get_rom_usage(db_file, game_name, rom, set_mode)
                 }
                 None => { 
-                    Romst::get_romset_usage(db_file, game_name, &set_mode)
+                    Romst::get_romset_usage(db_file, game_name, set_mode)
                  }
             };
 

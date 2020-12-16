@@ -44,15 +44,24 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
     pub fn load_dat(&mut self) -> Result<()> {
         self.reader_mut().trim_text(true);
 
+        self.writer.init()?;
+
         let mut buf = Vec::new();
         loop {
             match self.reader_mut().read_event(&mut buf)? {
-                Event::Start(ref e) if (e.name() == b"datafile") => {
-                    self.read_datafile()?;
-                },
-                Event::Start(ref e) if (e.name() == b"mame") => {
-                    self.read_mame_header(e.attributes());
-                    self.read_datafile()?;
+                Event::Start(ref e) => {
+                    if let Ok(name) = str::from_utf8(e.name()) {
+                        match name.to_lowercase().as_str() {
+                            "datafile" => {
+                                self.read_datafile()?;
+                            },
+                            "mame" => {
+                                self.read_mame_header(e.attributes());
+                                self.read_datafile()?;
+                            },
+                            _ => {} 
+                        }
+                    }
                 },
                 Event::Eof => {
                     self.reporter.start_finish();
@@ -74,20 +83,24 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
         loop {
             match self.reader_mut().read_event(&mut buf)? {
                 Event::Start(ref e) => {
-                    match e.name() {
-                        b"machine" | b"game" => self.read_game_entry( String::from_utf8(e.name().to_vec())?, e.attributes())?,
-                        b"header" => self.read_dat_header()?,
-                        tag_name => self.consume_tag(String::from_utf8(tag_name.to_vec())?)?,
+                    if let Ok(name) = str::from_utf8(e.name()) {
+                        match name.to_lowercase().as_str() {
+                            "machine" | "game" => self.read_game_entry( String::from_utf8(e.name().to_vec())?, e.attributes())?,
+                            "header" => self.read_dat_header()?,
+                            tag_name => self.consume_tag(tag_name.to_string())?,
+                        }
                     }
                 },
                 Event::End(e) => {
-                    if e.name() == b"datafile" {
-                        return Ok(());
-                    } else {
-                        return err!(RomstError::UnexpectedTagClose { 
-                            expected: String::from("datafile"),
-                            found: String::from_utf8(e.name().to_vec())?,
-                            position: self.buf_pos() });
+                    if let Ok(name) = str::from_utf8(e.name()){
+                        if name.to_lowercase().eq("datafile") {
+                            return Ok(());
+                        } else {
+                            return err!(RomstError::UnexpectedTagClose { 
+                                expected: String::from("datafile"),
+                                found: String::from_utf8(e.name().to_vec())?,
+                                position: self.buf_pos() });
+                        }
                     }
                 },
                 Event::Eof => return err!(RomstError::UnexpectedEOF),
@@ -100,19 +113,22 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
     // Reads through a tag moving the reader until it closes the tag
     fn consume_tag(&mut self, tag_name: String) -> Result<()> {
         let mut buf = Vec::new();
+        let tag = tag_name.to_lowercase();
         loop {
             match self.reader_mut().read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     self.consume_tag(String::from_utf8(e.name().to_vec())?)?;
                 },
                 Event::End(e) => {
-                    if e.name() == tag_name.as_bytes() {
-                        return Ok(());
-                    } else {
-                        return err!(RomstError::UnexpectedTagClose { 
-                            expected: tag_name,
-                            found: String::from_utf8(e.name().to_vec())?,
-                            position: self.buf_pos() });
+                    if let Ok(name) = str::from_utf8(e.name()) {
+                        if name.to_lowercase() == tag {
+                            return Ok(());
+                        } else {
+                            return err!(RomstError::UnexpectedTagClose { 
+                                expected: tag,
+                                found: String::from_utf8(e.name().to_vec())?,
+                                position: self.buf_pos() });
+                        }
                     }
                 },
                 Event::Eof => return err!(RomstError::UnexpectedEOF),
@@ -149,7 +165,7 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
 
     fn read_mame_header(&mut self, attributes: Attributes) {
         process_attributes(attributes, |key, value| {
-            match key {
+            match key.to_lowercase().as_str() {
                 "build" => {
                     let build = String::from(value);
                     info!("Build: {}", build);
@@ -172,31 +188,33 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
         loop {
             match self.reader_mut().read_event(&mut buf)? {
                 Event::Start(ref e) => {
-                    match e.name() {
-                        b"name" => {
-                            let name = self.get_text()?;
-                            info!("Name: {}", name);
-                        },
-                        b"description" => {
-                            let desc = self.get_text()?;
-                            info!("Description: {}", desc);
-                        },
-                        b"category" => {
-                            let cat = self.get_text()?;
-                            info!("Category: {}", cat);
-                        },
-                        b"version" => {
-                            let ver = self.get_text()?;
-                            info!("Version: {}", ver);
-                        },
-                        b"comment" => {
-                            let comment = self.get_text()?;
-                            info!("Comment: {}", comment);
-                        },
-                        tag_name => {
-                            // we consume the tag
-                            self.consume_tag(String::from_utf8(tag_name.to_vec())?)?;
-                        },
+                    if let Ok(name) = str::from_utf8(e.name()) {
+                        match name.to_lowercase().as_str() {
+                            "name" => {
+                                let name = self.get_text()?;
+                                info!("Name: {}", name);
+                            },
+                            "description" => {
+                                let desc = self.get_text()?;
+                                info!("Description: {}", desc);
+                            },
+                            "category" => {
+                                let cat = self.get_text()?;
+                                info!("Category: {}", cat);
+                            },
+                            "version" => {
+                                let ver = self.get_text()?;
+                                info!("Version: {}", ver);
+                            },
+                            "comment" => {
+                                let comment = self.get_text()?;
+                                info!("Comment: {}", comment);
+                            },
+                            tag_name => {
+                                // we consume the tag
+                                self.consume_tag(tag_name.to_string())?;
+                            },
+                        }
                     }
                 },
                 Event::End(_) => break,
@@ -219,37 +237,45 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
         loop {
             match self.reader_mut().read_event(&mut buf)? {
                 Event::Start(ref e) => {
-                    match e.name() {
-                        b"description" => {
-                            let desc = self.get_text()?;
-                            game.info_description = Some(desc);
-                        },
-                        b"year" => {
-                            let year = self.get_text()?;
-                            game.info_year = Some(year);
-                        },
-                        b"manufacturer" => {
-                            let manuf = self.get_text()?;
-                            game.info_manufacturer = Some(manuf);
-                        },
-                        n => self.consume_tag(String::from_utf8(n.to_vec())?)?
+                    if let Ok(name) = str::from_utf8(e.name()) {
+                        match name.to_lowercase().as_str() {
+                            "description" => {
+                                let desc = self.get_text()?;
+                                game.info_description = Some(desc);
+                            },
+                            "year" => {
+                                let year = self.get_text()?;
+                                game.info_year = Some(year);
+                            },
+                            "manufacturer" => {
+                                let manuf = self.get_text()?;
+                                game.info_manufacturer = Some(manuf);
+                            },
+                            n => self.consume_tag(n.to_string())?
+                        }
                     }
                 },
                 Event::Empty(e) => {
-                    match e.name() {
-                        b"rom" => {
-                            let rom = file_from_attributes(FileType::Rom, e.attributes())?;
-                            roms.push(rom);
-                        },
-                        b"sample" => {
-                            let sample = file_from_attributes(FileType::Sample, e.attributes());
-                            samples.push(sample);
-                        },
-                        b"disk" => {
-                            let disk = file_from_attributes(FileType::Disk, e.attributes());
-                            disks.push(disk);
-                        },
-                        _ => ()
+                    if let Ok(name) = str::from_utf8(e.name()) {
+                        match name.to_lowercase().as_str() {
+                            "rom" => {
+                                let rom = file_from_attributes(FileType::Rom, e.attributes())?;
+                                roms.push(rom);
+                            },
+                            "sample" => {
+                                let sample = file_from_attributes(FileType::Sample, e.attributes());
+                                samples.push(sample);
+                            },
+                            "disk" => {
+                                let disk = file_from_attributes(FileType::Disk, e.attributes());
+                                disks.push(disk);
+                            },
+                            "device_ref" => {
+                                let disk = file_from_attributes(FileType::Disk, e.attributes());
+                                disks.push(disk);
+                            },
+                            _ => ()
+                        }
                     }
                 },
                 Event::End(e) => {
@@ -273,7 +299,6 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
 
         Ok(())
     }
-
 }
 
 // Helper functions
@@ -302,7 +327,7 @@ fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<D
     let mut data_file = DataFile::new(file_type, "".to_string());
 
     process_attributes(attributes, |key, value| {
-        match key {
+        match key.to_lowercase().as_str() {
             "name" => data_file.name = String::from(value),
             "sha1" => data_file.sha1 = Some(String::from(value)),
             "md5" => data_file.md5 = Some(String::from(value)),
@@ -326,7 +351,7 @@ fn game_from_attributes(attributes: Attributes) -> Result<Game> {
     let mut game = Game::new(String::from(""));
 
     process_attributes(attributes, |key, value| {
-        match key {
+        match key.to_lowercase().as_str() {
             "name" => game.name = String::from(value),
             "cloneof" => game.clone_of = Some(String::from(value)),
             "romof" => game.rom_of = Some(String::from(value)),
@@ -345,10 +370,6 @@ fn game_from_attributes(attributes: Attributes) -> Result<Game> {
 #[cfg(test)]
 mod tests {
     use std::{rc::Rc, cell::RefCell};
-
-    use rusqlite::{Connection, OpenFlags};
-
-    use crate::data::writer::{sqlite::DBWriter};
 
     use super::*;
 
@@ -388,14 +409,10 @@ mod tests {
 
     #[test]
     fn read_xml() -> Result<()> {
-        let mut conn = Connection::open_in_memory_with_flags(OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
-        let writer = DBWriter::from_connection(&mut conn, 100);
-        writer.init()?;
         let writer = MemoryWriter::new();
         let games = Rc::clone(&writer.games);
         let initialized = Rc::clone(&writer.initialized);
 
-        writer.init()?;
         let path = Path::new("testdata").join("test.dat");
         let mut importer = DatImporter::<BufReader<File>, MemoryWriter>::from_path(&path, writer);
         importer.load_dat()?;

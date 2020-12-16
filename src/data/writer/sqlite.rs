@@ -30,7 +30,26 @@ impl <'d> DBWriter<'d> {
         Self { conn, ids: IdsCounter::new(), game_buffer: HashMap::new(), buffer_size }
     }
 
+    fn remove_table_if_exist(&self, table_name: &str) -> Result<()> {
+        let sql = "SELECT name FROM sqlite_master WHERE type='table' AND name = ?1;";
+        let result: Result<String, rusqlite::Error>  = self.conn.query_row(sql, params![ table_name ], |row| {
+            Ok(row.get(0)?)
+        });
+
+        match result {
+            Ok(name) => {
+                debug!("Deleting table {}...", name);
+                let sql_drop = format!("DROP TABLE IF EXISTS {};", name);
+                self.conn.execute(&sql_drop, params![ ])?;
+                Ok(())
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => { Ok(()) }
+            Err(e) => { Err(e.into()) }
+        }
+    }
+
     fn create_schema(&self) -> Result<()> {
+        self.remove_table_if_exist("info")?;
         self.conn.execute(
             "CREATE TABLE info (
                 name        TEXT,
@@ -39,6 +58,7 @@ impl <'d> DBWriter<'d> {
             params![])?;
 
         debug!("Creating ROMS table");
+        self.remove_table_if_exist("roms")?;
         // Rom
         self.conn.execute(
             "CREATE TABLE roms (
@@ -57,6 +77,7 @@ impl <'d> DBWriter<'d> {
         self.conn.execute( "CREATE INDEX checks ON roms(sha1, md5, crc);", params![])?;
 
         debug!("Creating Games table");
+        self.remove_table_if_exist("games")?;
         // Machines/Games
         self.conn.execute(
             "CREATE TABLE games (
@@ -73,6 +94,7 @@ impl <'d> DBWriter<'d> {
         self.conn.execute( "CREATE INDEX parents ON games(clone_of);", params![])?;
 
         debug!("Creating Games/ROMs table");
+        self.remove_table_if_exist("game_roms")?;
         // Machine/Roms
         self.conn.execute(
             "CREATE TABLE game_roms (

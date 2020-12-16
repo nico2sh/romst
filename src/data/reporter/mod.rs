@@ -18,7 +18,7 @@ pub struct Reporter<R: DataReader> {
 impl<R: DataReader> Reporter<R> {
     pub fn new(data_reader: R, file_reader: FileReader) -> Self { Self { data_reader, file_reader } }
 
-    pub fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Report> {
+    pub fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
         if file_paths.len() == 1 {
             let path = file_paths.get(0).unwrap().as_ref();
             if path.is_dir() {
@@ -29,7 +29,7 @@ impl<R: DataReader> Reporter<R> {
         self.check_files(file_paths, rom_mode)
     }
 
-    pub fn check_directory(&mut self, file_path: &impl AsRef<Path>, rom_mode: &RomsetMode) -> Result<Report> {
+    pub fn check_directory(&mut self, file_path: &impl AsRef<Path>, rom_mode: RomsetMode) -> Result<Report> {
         let path = file_path.as_ref();
         if path.is_dir() {
             let contents = path.read_dir()?.into_iter().filter_map(|dir_entry| {
@@ -46,7 +46,7 @@ impl<R: DataReader> Reporter<R> {
         }
     }
 
-    fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: &RomsetMode) -> Result<Report> {
+    fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
         let r: Vec<FileReport> = file_paths.iter().filter_map(|fp| {
             let path = fp.as_ref();
             if path.is_file() {
@@ -73,12 +73,12 @@ impl<R: DataReader> Reporter<R> {
             }
         }).collect();
 
-        let report = Report::from_files(r);
+        let report = Report::from_files(rom_mode, r);
 
         Ok(report)
     }
 
-    fn on_set_found(&mut self, game_set: GameSet, rom_mode: &RomsetMode) -> Result<FileReport> {
+    fn on_set_found(&mut self, game_set: GameSet, rom_mode: RomsetMode) -> Result<FileReport> {
         let mut file_report = FileReport::new(game_set.game.name);
 
         let rom_usage_result = self.data_reader.get_romsets_from_roms(game_set.roms, rom_mode)?;
@@ -99,7 +99,7 @@ impl<R: DataReader> Reporter<R> {
         Ok(file_report)
     }
 
-    pub fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: &RomsetMode) -> Result<SetReport> {
+    pub fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> {
         let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
 
         let mut report = SetReport::new(set_name);
@@ -143,9 +143,11 @@ mod tests {
     fn get_db_connection<'a, 'b>(dat_path: &'b impl AsRef<Path>) -> Result<Connection> {
         let mut conn = Connection::open_in_memory_with_flags(OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
         let writer = DBWriter::from_connection(&mut conn, 100);
-        writer.init().unwrap();
         let mut importer = DatImporter::<BufReader<File>, DBWriter>::from_path(dat_path, writer);
-        importer.load_dat()?;
+        match importer.load_dat() {
+            Ok(_) => {}
+            Err(e) => { println!("ERROR {:?}", e);}
+        }
 
         Ok(conn)
     }
@@ -181,7 +183,7 @@ mod tests {
         let mut reporter = Reporter::new(data_reader, file_reader);
 
         let game_path = Path::new("testdata").join("split");
-        let report = reporter.check(vec![ game_path ], &RomsetMode::Merged)?;
+        let report = reporter.check(vec![ game_path ], RomsetMode::Merged)?;
 
         tests::assert_file_report(&report, "device1", "device1", 1, 0, 0, 0);
         tests::assert_file_report(&report, "game1", "game1", 4, 2, 0, 0);
@@ -204,7 +206,7 @@ mod tests {
         let mut reporter = Reporter::new(data_reader, file_reader);
 
         let game_path = Path::new("testdata").join("wrong");
-        let report = reporter.check(vec![ &game_path ], &RomsetMode::Split)?;
+        let report = reporter.check(vec![ &game_path ], RomsetMode::Split)?;
 
         tests::assert_file_report(&report, "game1", "game1", 3, 1, 0, 0);
         tests::assert_file_report(&report, "game2", "game2", 2, 0, 1, 0);

@@ -1,17 +1,18 @@
 use std::fmt::{self, Display};
 use serde::{Deserialize, Serialize};
-use crate::data::models::file::DataFile;
+use crate::{data::models::file::DataFile, RomsetMode};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Report {
+    rom_mode: RomsetMode,
     pub files: Vec<FileReport>,
 }
 
 impl Report {
-    pub fn new() -> Self { Self { files: vec![] } }
+    pub fn new(rom_mode: RomsetMode) -> Self { Self { rom_mode, files: vec![] } }
 
-    pub fn from_files(files: Vec<FileReport>) -> Self {
-        Self { files }
+    pub fn from_files(rom_mode: RomsetMode, files: Vec<FileReport>) -> Self {
+        Self { rom_mode, files }
     }
 
     pub fn add_set(&mut self, file_report: FileReport) {
