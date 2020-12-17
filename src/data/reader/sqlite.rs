@@ -284,13 +284,12 @@ impl <'d> DataReader for DBReader<'d> {
 mod tests {
     use std::{io::BufReader, fs::File, path::Path};
     use rusqlite::{Connection, OpenFlags};
-    use crate::data::{importer::DatImporter, reader::sqlite::DBReader, models::file::FileType, writer::{sqlite::DBWriter, DataWriter}};
+    use crate::data::{importer::DatImporter, reader::sqlite::DBReader, models::file::FileType, writer::{sqlite::DBWriter}};
     use super::*;
 
     fn get_db_connection<'a, 'b>(dat_path: &'b impl AsRef<Path>) -> Result<Connection> {
         let mut conn = Connection::open_in_memory_with_flags(OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
         let writer = DBWriter::from_connection(&mut conn, 100);
-        writer.init().unwrap();
         let mut importer = DatImporter::<BufReader<File>, DBWriter>::from_path(dat_path, writer);
         importer.load_dat()?;
 

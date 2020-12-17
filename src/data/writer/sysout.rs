@@ -18,19 +18,15 @@ impl DataWriter for SysOutWriter {
         Ok(())
     }
 
-    fn on_new_game(&mut self, game: Game) -> Result<()> {
-        self.reporter.current_game(&game.name);
+    fn finish(&mut self) -> Result<()> {
         Ok(())
     }
 
-    fn on_new_roms(&mut self, _game: Game, roms: Vec<DataFile>) -> Result<()> {
+    fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
+        self.reporter.current_game(&game.name);
         for rom in roms {
             self.reporter.current_rom(&rom.name);
         };
-        Ok(())
-    }
-
-    fn finish(&mut self) -> Result<()> {
-        Ok(())
+        todo!()
     }
 }

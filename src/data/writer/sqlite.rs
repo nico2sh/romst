@@ -49,6 +49,20 @@ impl <'d> DBWriter<'d> {
     }
 
     fn create_schema(&self) -> Result<()> {
+        self.create_table_info()?;
+        self.create_table_roms()?;
+        self.create_table_games()?;
+        self.create_table_game_roms()?;
+        self.create_table_device_refs()?;
+        self.create_table_disks()?;
+        self.create_table_game_disks()?;
+        self.create_table_samples()?;
+        self.create_table_game_samples()?;
+
+        Ok(())
+    }
+
+    fn create_table_info(&self) -> Result<()> {
         self.remove_table_if_exist("info")?;
         self.conn.execute(
             "CREATE TABLE info (
@@ -57,6 +71,10 @@ impl <'d> DBWriter<'d> {
                 version     TEXT);", 
             params![])?;
 
+        Ok(())
+    }
+
+    fn create_table_roms(&self) -> Result<()> {
         debug!("Creating ROMS table");
         self.remove_table_if_exist("roms")?;
         // Rom
@@ -71,11 +89,15 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating ROMS indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX sha1 ON roms(sha1);", params![])?;
-        self.conn.execute( "CREATE INDEX md5 ON roms(md5);", params![])?;
-        self.conn.execute( "CREATE INDEX crc ON roms(crc);", params![])?;
-        self.conn.execute( "CREATE INDEX checks ON roms(sha1, md5, crc);", params![])?;
+        self.conn.execute( "CREATE INDEX roms_sha1 ON roms(sha1);", params![])?;
+        self.conn.execute( "CREATE INDEX roms_md5 ON roms(md5);", params![])?;
+        self.conn.execute( "CREATE INDEX roms_crc ON roms(crc);", params![])?;
+        self.conn.execute( "CREATE INDEX roms_checks ON roms(sha1, md5, crc);", params![])?;
 
+        Ok(())
+    }
+
+    fn create_table_games(&self) -> Result<()> {
         debug!("Creating Games table");
         self.remove_table_if_exist("games")?;
         // Machines/Games
@@ -91,8 +113,12 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating Games indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX parents ON games(clone_of);", params![])?;
+        self.conn.execute( "CREATE INDEX games_parents ON games(clone_of);", params![])?;
 
+        Ok(())
+    }
+
+    fn create_table_game_roms(&self) -> Result<()> {
         debug!("Creating Games/ROMs table");
         self.remove_table_if_exist("game_roms")?;
         // Machine/Roms
@@ -106,9 +132,99 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating Games/ROMs indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX game ON game_roms(game_name);", params![])?;
-        self.conn.execute( "CREATE INDEX rom ON game_roms(rom_id);", params![])?;
-        self.conn.execute( "CREATE INDEX rom_parents ON game_roms(parent);", params![])?;
+        self.conn.execute( "CREATE INDEX game_roms_game ON game_roms(game_name);", params![])?;
+        self.conn.execute( "CREATE INDEX game_roms_rom ON game_roms(rom_id);", params![])?;
+        self.conn.execute( "CREATE INDEX game_roms_parents ON game_roms(parent);", params![])?;
+
+        Ok(())
+    }
+
+    fn create_table_device_refs(&self) -> Result<()> {
+        debug!("Creating device_refs table");
+        self.remove_table_if_exist("devices")?;
+        // Machine/Roms
+        self.conn.execute(
+            "CREATE TABLE devices (
+                game_name   TEXT,
+                device_ref  TEXT,
+                PRIMARY KEY (game_name, device_ref));",
+            params![])?;
+        debug!("Creating devices indexes");
+        // Indexes
+        self.conn.execute( "CREATE INDEX devices_games ON devices(game_name);", params![])?;
+        self.conn.execute( "CREATE INDEX devices_refs ON devices(device_ref);", params![])?;
+
+        Ok(())
+    }
+
+    fn create_table_disks(&self) -> Result<()> {
+        debug!("Creating disks table");
+        self.remove_table_if_exist("disks")?;
+        // Rom
+        self.conn.execute(
+            "CREATE TABLE disks (
+                id      INTEGER PRIMARY KEY,
+                sha1    TEXT,
+                region  TEXT,
+                status  TEXT);", 
+            params![])?;
+        debug!("Creating disks indexes");
+        // Indexes
+        self.conn.execute( "CREATE INDEX disks_sha1 ON disks(sha1);", params![])?;
+
+        Ok(())
+    }
+
+    fn create_table_game_disks(&self) -> Result <()> {
+        debug!("Creating Games/Disks table");
+        self.remove_table_if_exist("game_disks")?;
+        // Machine/Roms
+        self.conn.execute(
+            "CREATE TABLE game_disks (
+                game_name   TEXT,
+                disk_id     TEXT,
+                parent      TEXT,
+                PRIMARY KEY (game_name, disk_id));",
+            params![])?;
+        debug!("Creating Games/Disks indexes");
+        // Indexes
+        self.conn.execute( "CREATE INDEX game_disks_game ON game_disks(game_name);", params![])?;
+        self.conn.execute( "CREATE INDEX game_disks_disks ON game_disks(disk_id);", params![])?;
+
+        Ok(())
+    }
+
+    fn create_table_samples(&self) -> Result<()> {
+        debug!("Creating samples table");
+        self.remove_table_if_exist("samples")?;
+        // Rom
+        self.conn.execute(
+            "CREATE TABLE samples (
+                sample_set  TEXT,
+                sample      TEXT,
+                PRIMARY KEY (sample_set, sample));", 
+            params![])?;
+        debug!("Creating samples indexes");
+        // Indexes
+        self.conn.execute( "CREATE INDEX sample_sets ON samples(sample_set);", params![])?;
+
+        Ok(())
+    }
+
+    fn create_table_game_samples(&self) -> Result <()> {
+        debug!("Creating Games/Samples table");
+        self.remove_table_if_exist("game_samples")?;
+        // Machine/Roms
+        self.conn.execute(
+            "CREATE TABLE game_samples (
+                game_name   TEXT,
+                sample_set  TEXT,
+                PRIMARY KEY (game_name, sample_set));",
+            params![])?;
+        debug!("Creating Games/Samples indexes");
+        // Indexes
+        self.conn.execute( "CREATE INDEX game_samples_game ON game_samples(game_name);", params![])?;
+        self.conn.execute( "CREATE INDEX game_samples_sample ON game_samples(sample_set);", params![])?;
 
         Ok(())
     }
@@ -236,17 +352,15 @@ impl <'d> DataWriter for DBWriter<'d> {
         self.create_schema()
     }
     
-    fn on_new_game(&mut self, game: Game) -> Result<()> {
+    fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
+        let game_name = game.name.clone();
+
         self.add_game_to_buffer(game);
 
         if self.game_buffer.len() as u16 >= self.buffer_size {
             self.write_game_buffer()?;
-        }
+        };
 
-        Ok(())
-    } 
-
-    fn on_new_roms(&mut self, game: Game, roms: Vec<DataFile>) -> Result<()> {
         let rom_list = self.get_rom_ids(roms);
         match rom_list {
             Ok(rom_id_names) => {
@@ -254,9 +368,9 @@ impl <'d> DataWriter for DBWriter<'d> {
                 for rom_id_name in rom_id_names {
                     let result = tx.execute(
                         "INSERT INTO game_roms (game_name, rom_id, name) VALUES (?1, ?2, ?3);",
-                        params![ game.name, rom_id_name.0, rom_id_name.1 ] );
+                        params![ game_name, rom_id_name.0, rom_id_name.1 ] );
                     match result {
-                        Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.1, rom_id_name.0, game.name) }
+                        Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.1, rom_id_name.0, game_name) }
                         Err(e) => { error!("Error adding rom `{}` to the game {}: {}", rom_id_name.1, "", e) }
                     }
                 }
@@ -288,4 +402,5 @@ impl <'d> DataWriter for DBWriter<'d> {
 
         Ok(())
     }
+
 }

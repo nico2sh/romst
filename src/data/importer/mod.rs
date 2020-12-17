@@ -32,7 +32,7 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
         &mut self.reader
     }
 
-    fn repot_new_entry(&mut self, new_entries: u32) {
+    fn report_new_entry(&mut self, new_entries: u32) {
         let buf_pos = self.buf_pos() as u64;
         self.reporter.update_position(buf_pos, new_entries);
     }
@@ -232,6 +232,7 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
         let mut roms = vec![];
         let mut samples = vec![];
         let mut disks = vec![];
+        let mut devices = vec![];
 
         let mut buf = Vec::new();
         loop {
@@ -263,16 +264,20 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
                                 roms.push(rom);
                             },
                             "sample" => {
-                                let sample = file_from_attributes(FileType::Sample, e.attributes());
-                                samples.push(sample);
+                                let sample = device_ref(e.attributes());
+                                if let Some(sample_name) = sample {
+                                    samples.push(sample_name);
+                                }
                             },
                             "disk" => {
-                                let disk = file_from_attributes(FileType::Disk, e.attributes());
+                                let disk = file_from_attributes(FileType::Disk, e.attributes())?;
                                 disks.push(disk);
                             },
                             "device_ref" => {
-                                let disk = file_from_attributes(FileType::Disk, e.attributes());
-                                disks.push(disk);
+                                let device = device_ref(e.attributes());
+                                if let Some(device_name) = device {
+                                    devices.push(device_name);
+                                }
                             },
                             _ => ()
                         }
@@ -293,9 +298,8 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
             buf.clear();
         }
 
-        self.writer.on_new_game(game.clone())?;
-        self.writer.on_new_roms(game, roms)?;
-        self.repot_new_entry(1);
+        self.writer.on_new_entry(game, roms, disks, samples, devices)?;
+        self.report_new_entry(1);
 
         Ok(())
     }
@@ -321,6 +325,18 @@ fn process_attributes<F>(attributes: Attributes, mut f: F) where F: FnMut(&str, 
             }
         }
     });
+}
+
+fn device_ref(attributes: Attributes) -> Option<String> {
+    let mut device_name = None;
+    process_attributes(attributes, |key, value| {
+        match key.to_lowercase().as_str() {
+            "name" => device_name = Some(String::from(value)),
+            k => debug!("Unknown atribute parsing: {}", k),
+        }
+    });
+
+    device_name
 }
 
 fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<DataFile> {
@@ -393,16 +409,13 @@ mod tests {
             Ok(())
         }
 
-        fn on_new_game(&mut self, game: Game) -> Result<()> {
-            self.games.borrow_mut().push(game.name);
-            Ok(())
-        }
-
-        fn on_new_roms(&mut self, game: Game, roms: Vec<DataFile>) -> Result<()> {
-            Ok(())
-        }
-
         fn finish(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
+            self.games.borrow_mut().push(game.name);
+
             Ok(())
         }
     }
