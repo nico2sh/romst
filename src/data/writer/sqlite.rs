@@ -345,22 +345,18 @@ impl <'d> DBWriter<'d> {
 
         Ok(Vec::from_iter(rows))
     }
-}
 
-impl <'d> DataWriter for DBWriter<'d> {
-    fn init(&self) -> Result<()> {
-        self.create_schema()
-    }
-    
-    fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
-        let game_name = game.name.clone();
-
+    fn add_game(&mut self, game: Game) -> Result<()> {
         self.add_game_to_buffer(game);
 
         if self.game_buffer.len() as u16 >= self.buffer_size {
             self.write_game_buffer()?;
         };
 
+        Ok(())
+    }
+
+    fn add_roms_for_game(&mut self, roms: Vec<DataFile>, game_name: String) -> Result<()> {
         let rom_list = self.get_rom_ids(roms);
         match rom_list {
             Ok(rom_id_names) => {
@@ -377,7 +373,22 @@ impl <'d> DataWriter for DBWriter<'d> {
                 tx.commit()?;
             }
             Err(e) => { error!("Error retrieving and inserting roms: {}", e) }
-        }
+        };
+
+        Ok(())
+    }
+}
+
+impl <'d> DataWriter for DBWriter<'d> {
+    fn init(&self) -> Result<()> {
+        self.create_schema()
+    }
+    
+    fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
+        let game_name = game.name.clone();
+
+        self.add_game(game)?;
+        self.add_roms_for_game(roms, game_name)?;
 
         Ok(())
     }
