@@ -62,12 +62,12 @@ impl Romst {
         Ok(DBWriter::from_connection(conn, 500))
     }
 
-    pub fn import_dat(input: String, output_file: String) -> Result<()> {
+    pub fn import_dat(input: String, output_file: String, overwrite: bool) -> Result<()> {
         println!("Loading file: {}", Style::new().bold().apply_to(&input));
         println!("Output: {}", Style::new().bold().apply_to(&output_file));
 
         let db_path = Path::new(&output_file);
-        if db_path.exists() {
+        if !overwrite && db_path.exists() {
             return Err(anyhow!("Destination file `{}` already exists, choose another output or rename the file.", output_file));
         }
 

@@ -16,7 +16,7 @@ struct Opts {
 #[derive(Clap)]
 enum SubCommand {
     #[clap(about = "Import a DAT file into the database")]
-    Import(LoadDat),
+    Import(ImportDat),
     #[clap(about = "Prints information from a romset")]
     SetInfo(SetInfo),
     #[clap(about = "Shows which sets a Rom is used")]
@@ -24,11 +24,13 @@ enum SubCommand {
 }
 
 #[derive(Clap)]
-struct LoadDat {
+struct ImportDat {
     #[clap(short, long)]
     file: String,
     #[clap(short, long)]
-    output: Option<String>
+    output: Option<String>,
+    #[clap(short = 'w', long, takes_value = false)]
+    overwrite: bool,
 }
 
 #[derive(Clap)]
@@ -62,8 +64,9 @@ fn main() {
     match opts.subcmd {
         SubCommand::Import(f) => {
             let output = f.output.unwrap_or(String::from(Path::new(&f.file).with_extension(DB_EXTENSION).to_str().unwrap()));
+            let overwrite = f.overwrite;
 
-            match Romst::import_dat(f.file.to_owned(), output) {
+            match Romst::import_dat(f.file.to_owned(), output, overwrite) {
                 Ok(_) => {}
                 Err(e) => { 
                     println!("{} parsing the file {}.\n{}",
