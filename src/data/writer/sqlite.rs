@@ -2,7 +2,7 @@ use std::{iter::FromIterator, collections::HashMap, path::Path};
 
 use anyhow::Result;
 use log::{debug, error};
-use rusqlite::{Connection, OpenFlags, ToSql, params};
+use rusqlite::{Connection, OpenFlags, ToSql, Transaction, params};
 
 use crate::{data::models::{file::DataFile, game::Game}};
 use super::DataWriter;
@@ -107,6 +107,7 @@ impl <'d> DBWriter<'d> {
                 clone_of    TEXT,
                 rom_of      TEXT,
                 source_file TEXT,
+                sample_of   TEXT,
                 info_desc   TEXT,
                 info_year   TEXT,
                 info_manuf  TEXT);",

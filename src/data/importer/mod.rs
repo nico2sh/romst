@@ -372,6 +372,7 @@ fn game_from_attributes(attributes: Attributes) -> Result<Game> {
             "cloneof" => game.clone_of = Some(String::from(value)),
             "romof" => game.rom_of = Some(String::from(value)),
             "sourcefile" => game.source_file = Some(String::from(value)),
+            "sampleof" => game.sample_of = Some(String::from(value)),
             k => debug!("Unknown atribute parsing: {}", k),
         }
     });

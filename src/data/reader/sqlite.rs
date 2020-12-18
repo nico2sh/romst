@@ -217,7 +217,7 @@ impl <'d> DBReader <'d>{
 
 impl <'d> DataReader for DBReader<'d> {
     fn get_game(&self, game_name: &String) -> Option<Game> {
-        let mut game_stmt = self.conn.prepare("SELECT name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf
+        let mut game_stmt = self.conn.prepare("SELECT name, clone_of, rom_of, source_file, sample_of, info_desc, info_year, info_manuf
             FROM games WHERE name = ?1;").ok()?;
         let game_result= game_stmt.query_row(params![ game_name ], |row| {
             Ok(
@@ -226,9 +226,10 @@ impl <'d> DataReader for DBReader<'d> {
                     clone_of: row.get(1)?,
                     rom_of: row.get(2)?,
                     source_file: row.get(3)?,
-                    info_description: row.get(4)?,
-                    info_year: row.get(5)?,
-                    info_manufacturer: row.get(6)?
+                    sample_of: row.get(4)?,
+                    info_description: row.get(5)?,
+                    info_year: row.get(6)?,
+                    info_manufacturer: row.get(7)?
                 }
             )
         });
@@ -342,9 +343,11 @@ mod tests {
         roms.push(rom2);
 
         let rom_sets = data_reader.get_romsets_from_roms(roms, RomsetMode::Merged)?;
+        // TODO add validation
         println!("{:?}", rom_sets);
 
         let stats = data_reader.get_stats()?;
+        // TODO add validation
         println!("{}", stats);
 
         Ok(())
