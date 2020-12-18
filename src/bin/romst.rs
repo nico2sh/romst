@@ -25,11 +25,11 @@ enum SubCommand {
 
 #[derive(Clap)]
 struct ImportDat {
-    #[clap(short, long)]
+    #[clap(short, long, about = "Source DAT file.")]
     file: String,
-    #[clap(short, long)]
-    output: Option<String>,
-    #[clap(short = 'w', long, takes_value = false)]
+    #[clap(short, long = "dest", about = "Destination file. If not specified, uses the source file name as reference.")]
+    destination: Option<String>,
+    #[clap(short = 'w', long, takes_value = false, about = "Overwrites the destination file if exists.")]
     overwrite: bool,
 }
 
@@ -39,8 +39,8 @@ struct SetInfo {
     db: String,
     #[clap(short, long, about = "A list of games to retrieve the information from")]
     game: Vec<String>,
-    #[clap(short, long, about = "Sets the romset mode, can be either `merge`, `non-merged` or `split`")]
-    set_mode: RomsetMode,
+    #[clap(short, long, about = "Sets the romset mode, can be either `merge`, `non-merged` or `split`. Default is `non-merged`")]
+    set_mode: Option<RomsetMode>,
 }
 
 #[derive(Clap)]
@@ -51,8 +51,8 @@ struct RomUsage {
     game: String,
     #[clap(short, long, about = "The romname to search, if empty, Romst will list all the roms present in the romset.")]
     rom: Option<String>,
-    #[clap(short, long, about = "Sets the romset mode, can be either `merge`, `non-merged` or `split`")]
-    set_mode: RomsetMode,
+    #[clap(short, long, about = "Sets the romset mode, can be either `merge`, `non-merged` or `split`. Default is `non-merged`")]
+    set_mode: Option<RomsetMode>,
 }
 
 fn main() {
@@ -63,7 +63,7 @@ fn main() {
 
     match opts.subcmd {
         SubCommand::Import(f) => {
-            let output = f.output.unwrap_or(String::from(Path::new(&f.file).with_extension(DB_EXTENSION).to_str().unwrap()));
+            let output = f.destination.unwrap_or(String::from(Path::new(&f.file).with_extension(DB_EXTENSION).to_str().unwrap()));
             let overwrite = f.overwrite;
 
             match Romst::import_dat(f.file.to_owned(), output, overwrite) {
@@ -79,8 +79,8 @@ fn main() {
         SubCommand::SetInfo(i) => {
             let db_file = i.db;
             let game_name = i.game;
-            let mode = i.set_mode;
-            match Romst::get_set_info(db_file, game_name.to_owned(), mode) {
+            let set_mode = i.set_mode;
+            match Romst::get_set_info(db_file, game_name.to_owned(), set_mode.unwrap_or_default()) {
                 Ok(romsets) => {
                     for game_set in romsets {
                         println!("{}", game_set);
@@ -95,7 +95,7 @@ fn main() {
             let db_file = ru.db;
             let game_name = ru.game;
             let rom_name = ru.rom;
-            let set_mode = ru.set_mode;
+            let set_mode = ru.set_mode.unwrap_or_default();
             let execution = match rom_name {
                 Some(rom) => {
                     Romst::get_rom_usage(db_file, game_name, rom, set_mode)

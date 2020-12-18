@@ -1,10 +1,10 @@
-use std::{iter::FromIterator, collections::HashMap, path::Path};
+use std::{iter::FromIterator, collections::HashMap};
 
 use anyhow::Result;
 use log::{debug, error};
-use rusqlite::{Connection, OpenFlags, ToSql, Transaction, params};
+use rusqlite::{Connection, params};
 
-use crate::{data::models::{file::DataFile, game::Game}};
+use crate::{data::{models::{file::DataFile, game::Game}, reader::sqlite::DBReader}};
 use super::DataWriter;
 
 #[derive(Debug)]
@@ -231,59 +231,16 @@ impl <'d> DBWriter<'d> {
     }
 
     fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<(u32, String)>> {
-        let mut rom_name_pair: Vec<(u32, String)> = vec![];
-        let mut roms_to_insert = vec![];
+        let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?;
 
-        for rom in roms {
-            let mut params: Vec<&dyn ToSql> = vec![];
-            let mut statement_where = vec![];
-            let mut param_num = 1;
-            if rom.sha1.is_some() {
-                params.push(rom.sha1.as_ref().unwrap());
-                statement_where.push(format!("sha1 = ?{}", param_num));
-                param_num = param_num + 1;
-            }
-            
-            if rom.md5.is_some() {
-                params.push(rom.md5.as_ref().unwrap());
-                statement_where.push(format!("md5 = ?{}", param_num));
-                param_num = param_num + 1;
-            }
-
-            if rom.crc.is_some() {
-                params.push(rom.crc.as_ref().unwrap());
-                statement_where.push(format!("crc = ?{}", param_num));
-                param_num = param_num + 1;
-            }
-
-            if rom.size.is_some() {
-                params.push(rom.size.as_ref().unwrap());
-                statement_where.push(format!("size = ?{}", param_num));
-            }
-
-            let statement = "SELECT id FROM roms WHERE ".to_string() +
-                &statement_where.join(" AND ") + ";";
-
-            let mut rom_stmt = self.conn.prepare_cached(&statement)?;
-            let rom_result: rusqlite::Result<u32> = rom_stmt.query_row(params, |row| {
-                Ok(row.get(0)?)
-            });
-
-            match rom_result {
-                Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    roms_to_insert.push(rom);
-                },
-                Ok(id) => {
-                    rom_name_pair.push((id, rom.name));
-                },
-                Err(e) => error!("Error adding a rom: {}", e),
-            };
-        }
+        let mut rom_name_pair: Vec<(u32, String)> = rom_ids.found.iter().map(|rom|{
+            (rom.0, rom.1.name.clone())
+        }).collect();
 
         let mut rom_row_id = self.ids.rom;
         let tx = self.conn.transaction()?;
 
-        for rom in roms_to_insert {
+        for rom in rom_ids.not_found {
             tx.execute(
                 "INSERT INTO roms (id, sha1, md5, crc, size, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6);",
                 params![ rom_row_id, rom.sha1, rom.md5, rom.crc, rom.size, rom.status ])

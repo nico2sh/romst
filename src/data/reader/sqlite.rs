@@ -1,16 +1,17 @@
 use std::{collections::HashSet, iter::FromIterator, collections::HashMap};
 
 use anyhow::Result;
-use log::{error, warn};
+use log::{debug, error, warn};
 use rusqlite::{Connection, ToSql, params};
 
 use crate::{RomsetMode, data::models::{file::{DataFile, FileType::{self, Rom}}, game::Game}};
 
 use super::{DataReader, RomSearch};
 
-struct SearchRomIds {
-    found: Vec<(u32, DataFile)>,
-    not_found: Vec<DataFile>
+#[derive(Debug)]
+pub struct SearchRomIds {
+    pub found: Vec<(u32, DataFile)>,
+    pub not_found: Vec<DataFile>
 }
 
 impl SearchRomIds {
@@ -91,55 +92,7 @@ impl <'d> DBReader <'d>{
     }
 
     fn get_rom_ids_from_files(&self, roms: Vec<DataFile>) -> Result<SearchRomIds> {
-        let mut result = SearchRomIds::new();
-        for rom in roms {
-            let mut params: Vec<&dyn ToSql> = vec![];
-            let mut statement_where = vec![];
-            let mut param_num = 1;
-            if rom.sha1.is_some() {
-                params.push(rom.sha1.as_ref().unwrap());
-                statement_where.push(format!("(sha1 = ?{} OR sha1 IS NULL)", param_num));
-                param_num = param_num + 1;
-            }
-            
-            if rom.md5.is_some() {
-                params.push(rom.md5.as_ref().unwrap());
-                statement_where.push(format!("(md5 = ?{} OR md5 IS NULL)", param_num));
-                param_num = param_num + 1;
-            }
-
-            if rom.crc.is_some() {
-                params.push(rom.crc.as_ref().unwrap());
-                statement_where.push(format!("(crc = ?{} OR crc IS NULL)", param_num));
-                param_num = param_num + 1;
-            }
-
-            if rom.size.is_some() {
-                params.push(rom.size.as_ref().unwrap());
-                statement_where.push(format!("(size = ?{} OR size IS NULL)", param_num));
-            }
-
-            let statement = "SELECT id FROM roms WHERE ".to_string() +
-                &statement_where.join(" AND ") + ";";
-
-            let mut rom_stmt = self.conn.prepare_cached(&statement)?;
-            let rom_result: rusqlite::Result<u32> = rom_stmt.query_row(params, |row| {
-                Ok(row.get(0)?)
-            });
-
-            match rom_result {
-                Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    result.add_not_found(rom);
-                    warn!("No ROM found");
-                },
-                Ok(id) => {
-                    result.add_found(id, rom);
-                },
-                Err(e) => error!("Error adding a rom: {}", e),
-            };
-        }
-        
-        Ok(result)
+        DBReader::get_ids_from_files(self.conn, roms)
     }
 
     fn find_sets_for_roms(&self, rom_ids: Vec<(u32, DataFile)>, rom_mode: RomsetMode) -> Result<RomSearch> {
@@ -213,6 +166,57 @@ impl <'d> DBReader <'d>{
         Ok(result)
     }
 
+    pub fn get_ids_from_files(conn: &Connection, roms: Vec<DataFile>) -> Result<SearchRomIds> {
+        let mut result = SearchRomIds::new();
+        for rom in roms {
+            let mut params: Vec<&dyn ToSql> = vec![];
+            let mut statement_where = vec![];
+            let mut param_num = 1;
+            if rom.sha1.is_some() {
+                params.push(rom.sha1.as_ref().unwrap());
+                statement_where.push(format!("(sha1 = ?{} OR sha1 IS NULL)", param_num));
+                param_num = param_num + 1;
+            }
+            
+            if rom.md5.is_some() {
+                params.push(rom.md5.as_ref().unwrap());
+                statement_where.push(format!("(md5 = ?{} OR md5 IS NULL)", param_num));
+                param_num = param_num + 1;
+            }
+
+            if rom.crc.is_some() {
+                params.push(rom.crc.as_ref().unwrap());
+                statement_where.push(format!("(crc = ?{} OR crc IS NULL)", param_num));
+                param_num = param_num + 1;
+            }
+
+            if rom.size.is_some() {
+                params.push(rom.size.as_ref().unwrap());
+                statement_where.push(format!("(size = ?{} OR size IS NULL)", param_num));
+            }
+
+            let statement = "SELECT id FROM roms WHERE ".to_string() +
+                &statement_where.join(" AND ") + ";";
+
+            let mut rom_stmt = conn.prepare_cached(&statement)?;
+            let rom_result: rusqlite::Result<u32> = rom_stmt.query_row(params, |row| {
+                Ok(row.get(0)?)
+            });
+
+            match rom_result {
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    debug!("No ROM found: {}", rom);
+                    result.add_not_found(rom);
+                },
+                Ok(id) => {
+                    result.add_found(id, rom);
+                },
+                Err(e) => error!("Error adding a rom: {}", e),
+            };
+        }
+        
+        Ok(result)
+    }
 }
 
 impl <'d> DataReader for DBReader<'d> {

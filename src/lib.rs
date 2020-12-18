@@ -21,6 +21,12 @@ pub enum RomsetMode {
     Split,
 }
 
+impl Default for RomsetMode {
+    fn default() -> Self {
+        RomsetMode::NonMerged
+    }
+}
+
 impl FromStr for RomsetMode {
     type Err = anyhow::Error;
 
