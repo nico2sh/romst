@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fmt::{self, Display}};
+use std::{cmp::Ordering, fmt::{self, Display}, hash::Hash};
 use std::cmp::Ord;
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +24,7 @@ impl Display for FileType {
     }
 }
 
-#[derive(Debug, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, Serialize, Deserialize)]
 pub struct DataFile {
     pub file_type: FileType,
     pub name: String,
@@ -33,6 +33,14 @@ pub struct DataFile {
     pub crc: Option<String>,
     pub size: Option<u32>,
     pub status: Option<String>,
+}
+
+impl Hash for DataFile {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.sha1.hash(state);
+        self.md5.hash(state);
+        self.crc.hash(state);
+    }
 }
 
 impl PartialEq for DataFile {

@@ -1,4 +1,4 @@
-use std::{iter::FromIterator, collections::HashMap};
+use std::{collections::{HashMap, HashSet}, iter::FromIterator, rc::Rc};
 
 use anyhow::Result;
 use log::{debug, error};
@@ -9,25 +9,82 @@ use super::DataWriter;
 
 #[derive(Debug)]
 pub struct IdsCounter {
-    pub rom: u32,
+    rom: u32,
+    disk: u32,
 }
 
 impl IdsCounter {
-    pub fn new() -> Self { Self { rom: 0 } }
+    pub fn new() -> Self { Self { rom: 0, disk: 0 } }
+    pub fn get_next_rom(&mut self) -> u32 {
+        let id = self.rom;
+        self.rom += 1;
+        id
+    }
 }
-
 
 #[derive(Debug)]
 pub struct DBWriter<'d> {
     conn: &'d mut Connection,
     ids: IdsCounter,
-    game_buffer: HashMap<String, Game>,
+    buffer: Buffer,
     buffer_size: u16,
+}
+
+#[derive(Debug)]
+struct Buffer {
+    ids: IdsCounter,
+    games: HashMap<String, Rc<Game>>,
+
+    roms: HashMap<DataFile, u32>,
+    game_roms: HashMap<String, Vec<u32>>,
+    samples: HashMap<String, HashSet<String>>,
+    device_refs: HashMap<String, Vec<String>>,
+}
+
+impl Buffer {
+    fn new() -> Self { Self {
+        ids: IdsCounter::new(),
+        games: HashMap::new(),
+        roms: HashMap::new(), 
+        game_roms: HashMap::new(),
+        samples: HashMap::new(),
+        device_refs: HashMap::new() }
+    }
+
+    fn len(&self) -> usize {
+        self.games.len() + self.samples.len()
+    }
+
+    fn add_game(&mut self, game_name: String, game: Rc<Game>) {
+        self.games.insert(game_name, game);
+    }
+
+    fn add_roms(&mut self, game_name: String, roms: Vec<DataFile>) {
+        let mut rom_ids = vec![];
+        roms.into_iter().for_each(|rom| {
+            let rom_id = self.roms.entry(rom).or_insert(self.ids.get_next_rom());
+            rom_ids.push(*rom_id);
+        });
+
+        self.add_roms_for_game(game_name, rom_ids);
+    }
+
+    fn add_roms_for_game(&mut self, game_name: String, rom_ids: Vec<u32>) {
+        self.game_roms.insert(game_name, rom_ids);
+    }
+
+    fn add_sample_pack(&mut self, sample_pack: String, samples: Vec<String>) {
+        self.samples.entry(sample_pack).or_insert(HashSet::new()).extend(samples);
+    }
+
+    fn add_device_refs(&mut self, game_name: String, device_refs: Vec<String>) {
+        self.device_refs.insert(game_name, device_refs);
+    }
 }
 
 impl <'d> DBWriter<'d> {
     pub fn from_connection(conn: &'d mut Connection, buffer_size: u16) -> Self {
-        Self { conn, ids: IdsCounter::new(), game_buffer: HashMap::new(), buffer_size }
+        Self { conn, ids: IdsCounter::new(), buffer: Buffer::new(), buffer_size }
     }
 
     fn remove_table_if_exist(&self, table_name: &str) -> Result<()> {
@@ -261,15 +318,10 @@ impl <'d> DBWriter<'d> {
         Ok(rom_name_pair)
     }
 
-    fn add_game_to_buffer(&mut self, game: Game) {
-        let game_name = game.name.to_owned();
-        self.game_buffer.insert(game_name, game); 
-    }
-
     fn write_game_buffer(&mut self) -> Result<()> {
         let tx = self.conn.transaction()?;
-        let buffer = &self.game_buffer;
-        let values = buffer.values();
+        let game_buffer = &self.buffer.games;
+        let values = game_buffer.values();
         for value in values {
             let game = value;
             let p = params![game.name,
@@ -288,7 +340,7 @@ impl <'d> DBWriter<'d> {
         }
 
         tx.commit()?;
-        self.game_buffer.clear();
+        self.buffer.games.clear();
 
         Ok(())
     }
@@ -304,18 +356,20 @@ impl <'d> DBWriter<'d> {
         Ok(Vec::from_iter(rows))
     }
 
-    fn add_game(&mut self, game: Game) -> Result<()> {
-        self.add_game_to_buffer(game);
+    fn add_game(&mut self, game: Rc<Game>) -> Result<()> {
+        let game_name = game.name.to_owned();
+        self.buffer.add_game(game_name, game); 
 
-        if self.game_buffer.len() as u16 >= self.buffer_size {
+        if self.buffer.len() as u16 >= self.buffer_size {
             self.write_game_buffer()?;
         };
 
         Ok(())
     }
 
-    fn add_roms_for_game(&mut self, roms: Vec<DataFile>, game_name: String) -> Result<()> {
+    fn add_roms_for_game(&mut self, roms: Vec<DataFile>, game_name: &str) -> Result<()> {
         let rom_list = self.get_rom_ids(roms);
+
         match rom_list {
             Ok(rom_id_names) => {
                 let tx = self.conn.transaction()?;
@@ -343,10 +397,18 @@ impl <'d> DataWriter for DBWriter<'d> {
     }
     
     fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
-        let game_name = game.name.clone();
+        let game_ref = Rc::new(game);
 
-        self.add_game(game)?;
+        let game_name = &game_ref.name;
+        let sample = game_ref.sample_of.as_ref();
+
+        self.add_game(Rc::clone(&game_ref))?;
         self.add_roms_for_game(roms, game_name)?;
+        //self.add_disks_for_game(disks, game_name)?;
+        if let Some(sample_name) = sample {
+            //self.add_samples_for_game(samples, sample_name, game_name)?;
+        }
+        //self.add_devices_for_game(device_refs, game_name)?;
 
         Ok(())
     }
