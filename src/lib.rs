@@ -85,7 +85,7 @@ impl Romst {
             Err(e) => { error!("Error initializing the database: {}", e) }
         }
         let mut dat_reader = DatImporter::from_path(&input, db_writer);
-        let file_size = fs::metadata(input).unwrap().len();
+        let file_size = fs::metadata(input)?.len();
         let reporter = DatImporterReporterSysOut::new(file_size);
         dat_reader.set_reporter(Box::new(reporter));
 

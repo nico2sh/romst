@@ -54,7 +54,7 @@ pub trait DataReader {
     fn get_game(&self, game_name: &String) -> Option<Game>;
     fn get_romset_roms(&self, game_name: &String, rom_mode: RomsetMode) -> Result<Vec<DataFile>>;
     fn get_game_set(&self, game_name: &String, rom_mode: RomsetMode) -> Result<GameSet> {
-        let game = self.get_game(game_name).unwrap();
+        let game = self.get_game(game_name)?;
         let roms = self.get_romset_roms(game_name, rom_mode)?;
 
         let game_set = GameSet::new(game, roms, vec![], vec![]);

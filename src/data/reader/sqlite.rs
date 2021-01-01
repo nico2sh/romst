@@ -226,26 +226,23 @@ impl <'d> DBReader <'d>{
             let mut params: Vec<&dyn ToSql> = vec![];
             let mut statement_where = vec![];
             let mut param_num = 1;
-            if rom.sha1.is_some() {
-                params.push(rom.sha1.as_ref().unwrap());
+            if let Some(ref sha1) = rom.sha1 {
+                params.push(sha1);
                 statement_where.push(format!("(sha1 = ?{} OR sha1 IS NULL)", param_num));
                 param_num = param_num + 1;
             }
-            
-            if rom.md5.is_some() {
-                params.push(rom.md5.as_ref().unwrap());
+            if let Some(ref md5) = rom.md5 {
+                params.push(md5);
                 statement_where.push(format!("(md5 = ?{} OR md5 IS NULL)", param_num));
                 param_num = param_num + 1;
             }
-
-            if rom.crc.is_some() {
-                params.push(rom.crc.as_ref().unwrap());
+            if let Some(ref crc) = rom.crc {
+                params.push(crc);
                 statement_where.push(format!("(crc = ?{} OR crc IS NULL)", param_num));
                 param_num = param_num + 1;
             }
-
-            if rom.size.is_some() {
-                params.push(rom.size.as_ref().unwrap());
+            if let Some(ref size) = rom.size {
+                params.push(size);
                 statement_where.push(format!("(size = ?{} OR size IS NULL)", param_num));
             }
 

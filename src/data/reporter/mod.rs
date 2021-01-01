@@ -2,7 +2,6 @@ mod report;
 
 use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
-use rayon::prelude::*;
 use self::report::{FileRename, FileReport, Report, SetNameReport, SetReport};
 
 use super::{models::{file::DataFile, set::GameSet}, reader::DataReader};
@@ -20,9 +19,11 @@ impl<R: DataReader> Reporter<R> {
 
     pub fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
         if file_paths.len() == 1 {
-            let path = file_paths.get(0).unwrap().as_ref();
-            if path.is_dir() {
-                return self.check_directory(&path.to_path_buf(), rom_mode)
+            if let Some(path) = file_paths.get(0) {
+                let p = path.as_ref();
+                if p.is_dir() {
+                    return self.check_directory(&p.to_path_buf(), rom_mode)
+                }
             }
         }
 
@@ -52,7 +53,7 @@ impl<R: DataReader> Reporter<R> {
             if path.is_file() {
                 match self.file_reader.get_game_set(&path, FileChecks::ALL) {
                     Ok(game_set) => {
-                        let file_report = self.on_set_found(game_set, rom_mode).unwrap();
+                        let file_report = self.on_set_found(game_set, rom_mode)?;
                         Some(file_report)
                     },
                     Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
