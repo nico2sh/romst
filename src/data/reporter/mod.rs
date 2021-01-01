@@ -1,8 +1,8 @@
-mod report;
+pub mod report;
 
 use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
-use self::report::{FileRename, FileReport, Report, SetNameReport, SetReport};
+use self::report::{FileRename, FileReport, Report, SetReport};
 
 use super::{models::{file::DataFile, set::GameSet}, reader::DataReader};
 use anyhow::Result;
@@ -15,7 +15,7 @@ pub struct Reporter<R: DataReader> {
 }
 
 impl<R: DataReader> Reporter<R> {
-    pub fn new(data_reader: R, file_reader: FileReader) -> Self { Self { data_reader, file_reader } }
+    pub fn new(data_reader: R) -> Self { Self { data_reader, file_reader: FileReader::new() } }
 
     pub fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
         if file_paths.len() == 1 {
@@ -189,8 +189,7 @@ mod tests {
         let conn = get_db_connection(&path)?;
         let data_reader = DBReader::from_connection(&conn);
 
-        let file_reader = FileReader::new();
-        let mut reporter = Reporter::new(data_reader, file_reader);
+        let mut reporter = Reporter::new(data_reader);
 
         let game_path = Path::new("testdata").join("split");
         let report = reporter.check(vec![ game_path ], RomsetMode::Merged)?;
@@ -212,8 +211,7 @@ mod tests {
         let conn = get_db_connection(&path)?;
         let data_reader = DBReader::from_connection(&conn);
 
-        let file_reader = FileReader::new();
-        let mut reporter = Reporter::new(data_reader, file_reader);
+        let mut reporter = Reporter::new(data_reader);
 
         let game_path = Path::new("testdata").join("wrong");
         let report = reporter.check(vec![ &game_path ], RomsetMode::Split)?;

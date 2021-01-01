@@ -1,4 +1,5 @@
 use std::fmt::{self, Display};
+use console::Style;
 use serde::{Deserialize, Serialize};
 use crate::{data::models::file::DataFile, RomsetMode};
 
@@ -23,7 +24,7 @@ impl Report {
 impl Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for file in &self.files {
-            write!(f, "{}\n", file)?;
+            write!(f, "{}", file)?;
         }
 
         Ok(())
@@ -50,12 +51,12 @@ impl FileReport {
 
 impl Display for FileReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "File name: {}", self.file_name)?;
+        writeln!(f, "{}: {}", Style::new().bold().yellow().apply_to("File name"), self.file_name)?;
         for s in &self.sets {
-            writeln!(f, "- Set: {}", s)?;
+            writeln!(f, "- {}: {}", Style::new().blue().apply_to("Set"), s)?;
         }
         if self.unknown.len() > 0 {
-            writeln!(f, "Unknown files:")?;
+            writeln!(f, "{}", Style::new().red().apply_to("Unknown files:"))?;
         }
         for file in &self.unknown {
             writeln!(f, "- {}", file)?;
@@ -125,29 +126,29 @@ impl SetReport {
 
 impl Display for SetReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut output = format!("{}", self.name);
+        writeln!(f, "{}", self.name)?;
 
         if self.roms_have.len() > 0 {
-            output.push_str("\nRoms:");
+            writeln!(f, "{}", Style::new().cyan().apply_to("Roms:"))?;
             for have in self.roms_have.as_slice() {
-                output.push_str(&format!("\n    - {}", have));
+                writeln!(f, "    - {}", have)?;
             }
         }
 
         if self.roms_to_rename.len() > 0 {
-            output.push_str("\nTo Rename:");
+            writeln!(f, "{}", Style::new().magenta().apply_to("To Rename:"))?;
             for to_rename in self.roms_to_rename.as_slice() {
-                output.push_str(&format!("\n    - {} => {}", to_rename.from, to_rename.to));
+                writeln!(f, "    - {} => {}", to_rename.from, to_rename.to)?;
             }
         }
 
         if self.roms_missing.len() > 0 {
-            output.push_str("\nMissing:");
+            writeln!(f, "{}", Style::new().red().apply_to("Missing:"))?;
             for missing in self.roms_missing.as_slice() {
-                output.push_str(&format!("\n    - {}", missing));
+                writeln!(f, "    - {}", missing)?;
             }
         }
 
-        write!(f, "{}", output)
+        Ok(())
     }
 }

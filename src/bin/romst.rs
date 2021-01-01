@@ -23,6 +23,8 @@ enum SubCommand {
     RomUsage(RomUsage),
     #[clap(about = "Gets info from the database")]
     DbInfo(DbInfo),
+    #[clap(about = "Checks several files or a directory")]
+    Check(Check)
 }
 
 #[derive(Clap)]
@@ -61,6 +63,16 @@ struct RomUsage {
 struct DbInfo {
     #[clap(short, long, about = "The ROMST database to use. You can create one with the import command.")]
     db: String,
+}
+
+#[derive(Clap)]
+struct Check {
+    #[clap(short, long, about = "The ROMST database to use. You can create one with the import command.")]
+    db: String,
+    #[clap(short, long, about = "A list of files or a directory to review")]
+    files: Vec<String>,
+    #[clap(short, long, about = "Sets the romset mode, can be either `merge`, `non-merged` or `split`. Default is `non-merged`")]
+    set_mode: Option<RomsetMode>,
 }
 
 fn main() {
@@ -129,6 +141,21 @@ fn main() {
                 }
                 Err(e) => {
                     println!("{} getting roms info.\n{}",
+                        Style::new().red().apply_to("ERROR"),
+                        e);
+                }
+            }
+        },
+        SubCommand::Check(check) => {
+            let db_file = check.db;
+            let files = check.files;
+            let set_mode = check.set_mode.unwrap_or_default();
+            match Romst::get_report(db_file, files, set_mode) {
+                Ok(report) => {
+                    println!("{}", report);
+                }
+                Err(e) => {
+                    println!("{} generating a report.\n{}",
                         Style::new().red().apply_to("ERROR"),
                         e);
                 }

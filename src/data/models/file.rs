@@ -41,8 +41,8 @@ impl PartialEq for DataFile {
 impl Ord for DataFile {
     fn cmp(&self, other: &Self) -> Ordering {
         // we use the name as prefix to sort
-        let mut self_name = self.name.to_owned();
-        let mut other_name = other.name.to_owned();
+        let self_name = self.name.to_owned();
+        let other_name = other.name.to_owned();
 
         return self_name.cmp(&other_name);
     }
@@ -59,7 +59,7 @@ impl Display for DataFile {
         let mut rom_data = vec![];
         rom_data.push(format!("name: {}", self.name));
 
-        write!(f, "{}:\n{}", self.name, self.info)
+        write!(f, "{} - {}", self.name, self.info)
     }
 }
 

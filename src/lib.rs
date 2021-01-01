@@ -5,7 +5,7 @@ mod macros;
 mod sysout;
 
 use console::Style;
-use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, reader::{RomSearch, sqlite::DBReport}, writer::DataWriter, writer::sqlite::DBWriter};
+use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, reader::{RomSearch, sqlite::DBReport}, reporter::{Reporter, report::Report}, writer::DataWriter, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
 use sysout::DatImporterReporterSysOut;
@@ -132,5 +132,14 @@ impl Romst {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.get_stats()
+    }
+
+    pub fn get_report(db_file: String, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
+        let conn = Romst::get_r_connection(db_file)?;
+        let reader = Romst::get_data_reader(&conn)?;
+
+        let mut reporter = Reporter::new(reader);
+
+        reporter.check(file_paths, rom_mode)
     }
 }
