@@ -27,7 +27,8 @@ impl DatImporterReporter for DatImporterReporterSysOut {
     }
 
     fn start_finish(&self) {
-        self.progress_bar.set_message(&format!("Finishing..."));
+        self.progress_bar.finish_at_current_pos();
+        self.progress_bar.set_message(&format!("Finishing, hold on..."));
     }
 
     fn finish(&self) {

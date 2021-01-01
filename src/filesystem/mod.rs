@@ -7,7 +7,7 @@ use zip::{ZipArchive, result::ZipError};
 use std::{fs::File, io::BufReader, path::Path};
 use bitflags::bitflags;
 
-use crate::{data::{self, models::{file::DataFile, game::Game, set::GameSet}}, error::RomstIOError};
+use crate::{data::{self, models::{file::{DataFile, DataFileInfo}, game::Game, set::GameSet}}, error::RomstIOError};
 
 use self::{md5::MD5Hasher, sha1::SHA1Hasher};
 
@@ -69,13 +69,15 @@ impl FileReader {
                     let crc = if use_crc { Some(format!("{:x}", f.crc32())) } else { None };
 
                     let rom = DataFile {
-                        file_type: FileType::Rom,
                         name: f.name().to_string(),
-                        sha1,
-                        md5,
-                        crc,
-                        size,
-                        status: None,
+                        info: DataFileInfo {
+                            file_type: FileType::Rom,
+                            sha1,
+                            md5,
+                            crc,
+                            size,
+                            status: None,
+                        }
                     };
                     
                     roms.push(rom);
@@ -117,10 +119,10 @@ mod tests {
         assert!(game_set.roms.len() == 4);
         assert!(game_set.roms.into_iter().filter(|rom| {
             rom.name == "rom1.trom".to_string()
-            && rom.sha1 == Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string())
-            && rom.md5 == Some("aa818fc7769cdd51149f794b0d4fbec9".to_string())
-            && rom.crc == Some("1d460eee".to_string())
-            && rom.size == Some(2048)
+            && rom.info.sha1 == Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string())
+            && rom.info.md5 == Some("aa818fc7769cdd51149f794b0d4fbec9".to_string())
+            && rom.info.crc == Some("1d460eee".to_string())
+            && rom.info.size == Some(2048)
         }).collect::<Vec<_>>().len() == 1);
 
         Ok(())

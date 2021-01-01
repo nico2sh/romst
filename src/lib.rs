@@ -9,11 +9,11 @@ use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBRea
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
 use sysout::DatImporterReporterSysOut;
-use std::{fs::{self, File}, io::BufReader, path::{Path}, str::FromStr};
+use std::{fs, path::Path, str::FromStr};
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
-pub const DEFAULT_WRITE_BUFFER_SIZE: u16 = 1000;
+pub const DEFAULT_WRITE_BUFFER_SIZE: u16 = 5000;
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub enum RomsetMode {

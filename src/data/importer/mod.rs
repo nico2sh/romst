@@ -353,12 +353,12 @@ fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<D
     process_attributes(attributes, |key, value| {
         match key.to_lowercase().as_str() {
             "name" => data_file.name = String::from(value),
-            "sha1" => data_file.sha1 = Some(String::from(value)),
-            "md5" => data_file.md5 = Some(String::from(value)),
-            "crc" => data_file.crc = Some(String::from(value)),
-            "size" => data_file.size = value.parse::<u32>().ok(),
+            "sha1" => data_file.info.sha1 = Some(String::from(value)),
+            "md5" => data_file.info.md5 = Some(String::from(value)),
+            "crc" => data_file.info.crc = Some(String::from(value)),
+            "size" => data_file.info.size = value.parse::<u32>().ok(),
             "serial" => debug!("Ignoring serial attribute from file"),
-            "status" => data_file.status = Some(String::from(value)),
+            "status" => data_file.info.status = Some(String::from(value)),
             k => debug!("Unknown atribute parsing: {}", k),
         }
     });

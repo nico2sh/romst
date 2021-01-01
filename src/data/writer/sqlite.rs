@@ -4,7 +4,7 @@ use anyhow::Result;
 use log::{debug, error};
 use rusqlite::{Connection, params};
 
-use crate::{data::{models::{file::DataFile, game::Game}, reader::sqlite::DBReader}};
+use crate::{data::{models::{file::{DataFile, DataFileInfo}, game::Game}, reader::sqlite::DBReader}};
 use super::DataWriter;
 
 #[derive(Debug)]
@@ -35,24 +35,30 @@ struct Buffer {
     ids: IdsCounter,
     games: HashMap<String, Rc<Game>>,
 
-    roms: HashMap<DataFile, u32>,
+    roms: HashMap<DataFileInfo, u32>,
     game_roms: HashMap<String, Vec<(u32, String)>>,
     samples: HashMap<String, HashSet<String>>,
-    device_refs: HashMap<String, Vec<String>>,
+    device_refs: HashMap<String, HashSet<String>>,
+    disks: HashMap<DataFile, u32>,
+    game_disks: HashMap<String, Vec<u32>>,
 }
 
 impl Buffer {
-    fn new() -> Self { Self {
-        ids: IdsCounter::new(),
-        games: HashMap::new(),
-        roms: HashMap::new(), 
-        game_roms: HashMap::new(),
-        samples: HashMap::new(),
-        device_refs: HashMap::new() }
+    fn new() -> Self {
+        Self {
+            ids: IdsCounter::new(),
+            games: HashMap::new(),
+            roms: HashMap::new(), 
+            game_roms: HashMap::new(),
+            samples: HashMap::new(),
+            device_refs: HashMap::new(),
+            disks: HashMap::new(),
+            game_disks: HashMap::new(),
+        }
     }
 
     fn len(&self) -> usize {
-        self.games.len() + self.samples.len()
+        self.games.len() + self.samples.len() + self.roms.len() + self.game_roms.len()
     }
 
     fn add_game(&mut self, game_name: String, game: Rc<Game>) {
@@ -62,13 +68,13 @@ impl Buffer {
     fn add_roms(&mut self, roms: Vec<DataFile>) -> Vec<(u32, DataFile)> {
         let mut rom_ids = vec![];
         roms.into_iter().for_each(|rom| {
-            match self.roms.get(&rom) {
+            match self.roms.get(&rom.info) {
                 Some(rom_id) => {
                     rom_ids.push((*rom_id, rom));
                 }
                 None => {
                     let id = self.ids.get_next_rom();
-                    self.roms.insert(rom.clone(), id);
+                    self.roms.insert(rom.info.clone(), id);
                     rom_ids.push((id, rom));
                 }
             }
@@ -85,8 +91,32 @@ impl Buffer {
         self.samples.entry(sample_pack).or_insert(HashSet::new()).extend(samples);
     }
 
+    fn add_disks(&mut self, disks: Vec<DataFile>) -> Vec<(u32, DataFile)> {
+        let mut disk_ids = vec![];
+        disks.into_iter().for_each(|disk| {
+            match self.disks.get(&disk) {
+                Some(disk_id) => {
+                    disk_ids.push((*disk_id, disk));
+                }
+                None => {
+                    let id = self.ids.get_next_rom();
+                    self.disks.insert(disk.clone(), id);
+                    disk_ids.push((id, disk));
+                }
+            }
+        });
+
+        disk_ids
+    }
+
+    fn add_disks_for_game(&mut self, game_name: String, disk_ids: Vec<u32>) {
+        self.game_disks.insert(game_name, disk_ids);
+    }
+
     fn add_device_refs(&mut self, game_name: String, device_refs: Vec<String>) {
-        self.device_refs.insert(game_name, device_refs);
+        let mut devices =  HashSet::new();
+        devices.extend(device_refs);
+        self.device_refs.insert(game_name, devices);
     }
 }
 
@@ -122,7 +152,6 @@ impl <'d> DBWriter<'d> {
         self.create_table_disks()?;
         self.create_table_game_disks()?;
         self.create_table_samples()?;
-        //self.create_table_game_samples()?;
 
         Ok(())
     }
@@ -231,12 +260,14 @@ impl <'d> DBWriter<'d> {
         self.conn.execute(
             "CREATE TABLE disks (
                 id      INTEGER PRIMARY KEY,
+                name    TEXT,
                 sha1    TEXT,
                 region  TEXT,
                 status  TEXT);", 
             params![])?;
         debug!("Creating disks indexes");
         // Indexes
+        self.conn.execute( "CREATE INDEX disks_name ON disks(name);", params![])?;
         self.conn.execute( "CREATE INDEX disks_sha1 ON disks(sha1);", params![])?;
 
         Ok(())
@@ -249,7 +280,7 @@ impl <'d> DBWriter<'d> {
         self.conn.execute(
             "CREATE TABLE game_disks (
                 game_name   TEXT,
-                disk_id     TEXT,
+                disk_id     INTEGER,
                 parent      TEXT,
                 PRIMARY KEY (game_name, disk_id));",
             params![])?;
@@ -278,24 +309,6 @@ impl <'d> DBWriter<'d> {
         Ok(())
     }
 
-    /*fn create_table_game_samples(&self) -> Result <()> {
-        debug!("Creating Games/Samples table");
-        self.remove_table_if_exist("game_samples")?;
-        // Machine/Roms
-        self.conn.execute(
-            "CREATE TABLE game_samples (
-                game_name   TEXT,
-                sample_set  TEXT,
-                PRIMARY KEY (game_name, sample_set));",
-            params![])?;
-        debug!("Creating Games/Samples indexes");
-        // Indexes
-        self.conn.execute( "CREATE INDEX game_samples_game ON game_samples(game_name);", params![])?;
-        self.conn.execute( "CREATE INDEX game_samples_sample ON game_samples(sample_set);", params![])?;
-
-        Ok(())
-    }*/
-
     fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<(u32, String)>> {
         // We search the database
         let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?;
@@ -322,6 +335,7 @@ impl <'d> DBWriter<'d> {
         let rom_buffer = &self.buffer.roms;
         let game_rom_buffer = &self.buffer.game_roms;
         let sample_buffer = &self.buffer.samples;
+        let devices_buffer = &self.buffer.device_refs;
 
         let values = game_buffer.values();
         for value in values {
@@ -333,9 +347,10 @@ impl <'d> DBWriter<'d> {
                 game.info_description,
                 game.info_year,
                 game.info_manufacturer];
-            match tx.execute("INSERT INTO games (name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf)
+            let result = tx.execute("INSERT INTO games (name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);",
-                p) {
+                p);
+            match result {
                     Ok(_) => {}
                     Err(e) => { error!("Error inserting row in the games db: {}", e) }
                 }
@@ -344,9 +359,13 @@ impl <'d> DBWriter<'d> {
         for rom_data in rom_buffer {
             let rom_row_id = rom_data.1;
             let rom = rom_data.0;
-            tx.execute(
+            let result = tx.execute(
                 "INSERT INTO roms (id, sha1, md5, crc, size, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6);",
-                params![ rom_row_id, rom.sha1, rom.md5, rom.crc, rom.size, rom.status ])?;
+                params![ rom_row_id, rom.sha1, rom.md5, rom.crc, rom.size, rom.status ]);
+            match result {
+                Ok(_n) => { debug!("Inserted rom {} with id {}", rom, rom_row_id) }
+                Err(e) => { error!("Error adding rom `{}` with id `{}`: {}", rom, rom_row_id, e) }
+            }
         }
 
         for game_roms in game_rom_buffer {
@@ -377,11 +396,26 @@ impl <'d> DBWriter<'d> {
             }
         }
 
+        for device_refs in devices_buffer {
+            let game_name = device_refs.0;
+            let devices = device_refs.1;
+            for device in devices {
+                let result = tx.execute(
+                    "INSERT INTO devices (game_name, device_ref) VALUES (?1, ?2);",
+                    params![game_name, device]);
+                match result {
+                    Ok(_) => { debug!("Inserted device ref `{}` for game `{}`", device, game_name); }
+                    Err(e) => { error!("Error inserting device ref `{}` for game `{}`: {}", device, game_name, e); }
+                }
+            }
+        }
+
         tx.commit()?;
         self.buffer.games.clear();
         self.buffer.roms.clear();
         self.buffer.game_roms.clear();
         self.buffer.samples.clear();
+        self.buffer.device_refs.clear();
 
         Ok(())
     }
@@ -421,6 +455,20 @@ impl <'d> DBWriter<'d> {
 
         Ok(())
     }
+
+    fn add_devices_for_game(&mut self, device_refs:Vec<String>, game_name: &str) -> Result<()> {
+        self.buffer.add_device_refs(game_name.to_string(), device_refs);
+
+        Ok(())
+    }
+
+    fn add_disks_for_game(&mut self, disks:Vec<DataFile>, game_name: &str) -> Result<()> {
+        // let disk_list = self.get_disk_ids(disks)?;
+
+        // self.buffer.ad
+
+        Ok(())
+    }
 }
 
 impl <'d> DataWriter for DBWriter<'d> {
@@ -436,11 +484,11 @@ impl <'d> DataWriter for DBWriter<'d> {
 
         self.add_game(Rc::clone(&game_ref))?;
         self.add_roms_for_game(roms, game_name)?;
-        //self.add_disks_for_game(disks, game_name)?;
         if let Some(sample_name) = sample {
             self.add_samples(samples, sample_name)?;
         }
-        //self.add_devices_for_game(device_refs, game_name)?;
+        // self.add_disks_for_game(disks, game_name)?;
+        self.add_devices_for_game(device_refs, game_name)?;
 
         Ok(())
     }

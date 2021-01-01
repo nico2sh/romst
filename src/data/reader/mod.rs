@@ -67,4 +67,6 @@ pub trait DataReader {
     fn get_romset_shared_roms(&self, game_name: &String, rom_mode: RomsetMode) -> Result<RomSearch>;
 
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch>;
+
+    fn get_devices_for_game(&self, game_name: &String) -> Result<Vec<String>>;
 }

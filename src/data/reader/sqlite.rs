@@ -5,7 +5,7 @@ use console::Style;
 use log::{debug, error, warn};
 use rusqlite::{Connection, ToSql, params};
 
-use crate::{RomsetMode, data::models::{file::{DataFile, FileType::{self, Rom}}, game::Game}};
+use crate::{RomsetMode, data::models::{file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
 
 use super::{DataReader, RomSearch};
 
@@ -32,10 +32,11 @@ pub struct DBReport {
     pub roms: u32,
     pub roms_in_games: u32,
     pub samples: u32,
+    pub device_refs: u32,
 }
 
 impl DBReport {
-    pub fn new() -> Self { Self { games: 0, roms: 0, roms_in_games: 0, samples: 0 } }
+    pub fn new() -> Self { Self { games: 0, roms: 0, roms_in_games: 0, samples: 0, device_refs: 0 } }
 }
 
 impl Display for DBReport {
@@ -44,7 +45,8 @@ impl Display for DBReport {
         writeln!(f, "- Games: {}", self.games)?;
         writeln!(f, "- Roms: {}", self.roms)?;
         writeln!(f, "- Roms in Games: {}", self.roms_in_games)?;
-        writeln!(f, "- Samples: {}", self.samples)
+        writeln!(f, "- Samples: {}", self.samples)?;
+        writeln!(f, "- Device References: {}", self.device_refs)
     }
 }
 
@@ -90,13 +92,15 @@ impl <'d> DBReader <'d>{
         let mut roms_stmt = self.conn.prepare(&query)?;
         let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
             Ok(DataFile {
-                file_type: Rom,
                 name: row.get(1)?,
-                sha1: row.get(2)?,
-                md5: row.get(3)?,
-                crc: row.get(4)?,
-                size: row.get(5)?,
-                status: row.get(6)?,
+                info: DataFileInfo {
+                    file_type: Rom,
+                    sha1: row.get(2)?,
+                    md5: row.get(3)?,
+                    crc: row.get(4)?,
+                    size: row.get(5)?,
+                    status: row.get(6)?
+                }
             })
         })?.filter_map(|row| row.ok());
 
@@ -130,6 +134,12 @@ impl <'d> DBReader <'d>{
             Ok(row.get(0)?)
         })?;
         db_report.samples = samples;
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM devices;")?;
+        let device_refs: u32 = stmt.query_row(params![], |row| {
+            Ok(row.get(0)?)
+        })?;
+        db_report.device_refs = device_refs;
 
         return Ok(db_report);
     }
@@ -169,11 +179,11 @@ impl <'d> DBReader <'d>{
             };
 
             data_file.name = name.to_string();
-            data_file.sha1 = row.get(2)?;
-            data_file.md5 = row.get(3)?;
-            data_file.crc = row.get(4)?;
-            data_file.size = row.get(5)?;
-            data_file.status = row.get(6)?;
+            data_file.info.sha1 = row.get(2)?;
+            data_file.info.md5 = row.get(3)?;
+            data_file.info.crc = row.get(4)?;
+            data_file.info.size = row.get(5)?;
+            data_file.info.status = row.get(6)?;
             Ok((row.get(0)?,
                 data_file,
                 row.get(7)?,
@@ -209,9 +219,10 @@ impl <'d> DBReader <'d>{
         Ok(result)
     }
 
-    pub fn get_ids_from_files(conn: &Connection, roms: Vec<DataFile>) -> Result<SearchRomIds> {
+    pub fn get_ids_from_files(conn: &Connection, files: Vec<DataFile>) -> Result<SearchRomIds> {
         let mut result = SearchRomIds::new();
-        for rom in roms {
+        for rom_file in files {
+            let rom = &rom_file.info;
             let mut params: Vec<&dyn ToSql> = vec![];
             let mut statement_where = vec![];
             let mut param_num = 1;
@@ -249,12 +260,12 @@ impl <'d> DBReader <'d>{
             match rom_result {
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
                     debug!("No ROM found: {}", rom);
-                    result.add_not_found(rom);
+                    result.add_not_found(rom_file);
                 },
                 Ok(id) => {
-                    result.add_found(id, rom);
+                    result.add_found(id, rom_file);
                 },
-                Err(e) => error!("Error adding a rom: {}", e),
+                Err(e) => error!("Error finding a rom: {}", e),
             };
         }
         
@@ -326,6 +337,18 @@ impl <'d> DataReader for DBReader<'d> {
         rom_search.unknowns.append(search_rom_ids_result.not_found.as_mut());
         Ok(rom_search)
     }
+
+    fn get_devices_for_game(&self, game_name: &String) -> Result<Vec<String>> {
+        let mut search_stmt = self.conn.prepare("SELECT devices.device_ref FROM devices
+            JOIN game_roms ON devices.device_ref = game_roms.game_name
+            WHERE devices.game_name = ?1 GROUP BY devices.device_ref;")?;
+
+        let result = search_stmt.query_map(params![game_name], |row| {
+            Ok(row.get(0)?)
+        })?.filter_map(|row| row.ok());
+
+        Ok(result.collect())
+    }
 }
 
 #[cfg(test)]
@@ -382,11 +405,11 @@ mod tests {
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new(FileType::Rom, "rom1".to_string());
-        rom1.sha1 = Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string());
+        rom1.info.sha1 = Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string());
         roms.push(rom1);
         let mut rom2 = DataFile::new(FileType::Rom, "rom2".to_string());
-        rom2.sha1 = Some("802e076afc412be12db3cb8c79523f65d612a6cf".to_string());
-        rom2.crc = Some("dc20b010".to_string());
+        rom2.info.sha1 = Some("802e076afc412be12db3cb8c79523f65d612a6cf".to_string());
+        rom2.info.crc = Some("dc20b010".to_string());
         roms.push(rom2);
 
         let rom_sets = data_reader.get_romsets_from_roms(roms, RomsetMode::Merged)?;
@@ -408,7 +431,7 @@ mod tests {
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new(FileType::Rom, "rom1".to_string());
-        rom1.sha1 = Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string());
+        rom1.info.sha1 = Some("8bb3a81b9fa2de5163f0ffc634a998c455bcca25".to_string());
         roms.push(rom1);
         let result = data_reader.get_rom_ids_from_files(roms)?;
         let rom_ids = result.found;
@@ -429,8 +452,8 @@ mod tests {
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new(FileType::Rom, "rom1".to_string());
-        rom1.sha1 = Some("802e076afc412be12db3cb8c79523f65d612a6cf".to_string());
-        rom1.crc = Some("dc20b010".to_string());
+        rom1.info.sha1 = Some("802e076afc412be12db3cb8c79523f65d612a6cf".to_string());
+        rom1.info.crc = Some("dc20b010".to_string());
         roms.push(rom1);
         let result = data_reader.get_rom_ids_from_files(roms)?;
         let rom_ids = result.found;
@@ -451,9 +474,9 @@ mod tests {
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new(FileType::Rom, "rom1".to_string());
-        rom1.sha1 = Some("8273bfebe84dd41a5d237add8f9d03ac9bb0ef54".to_string());
-        rom1.crc = Some("1b736d41".to_string());
-        rom1.md5 = Some("0de4e413deb3ae71e9326d70df4d1a27".to_string());
+        rom1.info.sha1 = Some("8273bfebe84dd41a5d237add8f9d03ac9bb0ef54".to_string());
+        rom1.info.crc = Some("1b736d41".to_string());
+        rom1.info.md5 = Some("0de4e413deb3ae71e9326d70df4d1a27".to_string());
         roms.push(rom1);
         let result = data_reader.get_rom_ids_from_files(roms)?;
         let rom_ids = result.found;
@@ -474,9 +497,9 @@ mod tests {
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new(FileType::Rom, "rom1".to_string());
-        rom1.sha1 = Some("8273bfebe84dd41a5d237add8f9d03ac9bb0ef54".to_string());
-        rom1.crc = Some("1b736d41".to_string());
-        rom1.size = Some(1024);
+        rom1.info.sha1 = Some("8273bfebe84dd41a5d237add8f9d03ac9bb0ef54".to_string());
+        rom1.info.crc = Some("1b736d41".to_string());
+        rom1.info.size = Some(1024);
         roms.push(rom1);
         let result = data_reader.get_rom_ids_from_files(roms)?;
         let rom_ids = result.found;
@@ -488,4 +511,16 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn get_devices_dependencies() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+        let data_reader = DBReader::from_connection(&conn);
+
+        let devices = data_reader.get_devices_for_game(&"game1".to_string())?;
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0], "device1");
+
+        Ok(())
+    }
 }
