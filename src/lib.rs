@@ -5,10 +5,11 @@ mod macros;
 mod sysout;
 
 use console::Style;
-use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, writer::DataWriter, writer::sqlite::DBWriter, reader::RomSearch};
+use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, reader::{RomSearch, sqlite::DBReport}, writer::DataWriter, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use std::{fs::File, io::BufReader, collections::HashMap, path::{Path}, str::FromStr};
+use sysout::DatImporterReporterSysOut;
+use std::{fs::{self, File}, io::BufReader, path::{Path}, str::FromStr};
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
@@ -83,7 +84,10 @@ impl Romst {
             Ok(_) => {},
             Err(e) => { error!("Error initializing the database: {}", e) }
         }
-        let mut dat_reader: DatImporter<BufReader<File>, DBWriter> = DatImporter::<BufReader<File>, DBWriter>::from_path(&input, db_writer);
+        let mut dat_reader = DatImporter::from_path(&input, db_writer);
+        let file_size = fs::metadata(input).unwrap().len();
+        let reporter = DatImporterReporterSysOut::new(file_size);
+        dat_reader.set_reporter(Box::new(reporter));
 
         match dat_reader.load_dat() {
             Ok(_) => info!("Parsing complete"),
@@ -122,5 +126,11 @@ impl Romst {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.get_romset_shared_roms(&game_name, rom_mode)
+    }
+
+    pub fn get_db_info(db_file: String) -> Result<DBReport> {
+        let conn = Romst::get_r_connection(db_file)?;
+        let reader = Romst::get_data_reader(&conn)?;
+        reader.get_stats()
     }
 }

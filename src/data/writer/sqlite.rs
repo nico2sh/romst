@@ -36,7 +36,7 @@ struct Buffer {
     games: HashMap<String, Rc<Game>>,
 
     roms: HashMap<DataFile, u32>,
-    game_roms: HashMap<String, Vec<u32>>,
+    game_roms: HashMap<String, Vec<(u32, String)>>,
     samples: HashMap<String, HashSet<String>>,
     device_refs: HashMap<String, Vec<String>>,
 }
@@ -59,17 +59,25 @@ impl Buffer {
         self.games.insert(game_name, game);
     }
 
-    fn add_roms(&mut self, game_name: String, roms: Vec<DataFile>) {
+    fn add_roms(&mut self, roms: Vec<DataFile>) -> Vec<(u32, DataFile)> {
         let mut rom_ids = vec![];
         roms.into_iter().for_each(|rom| {
-            let rom_id = self.roms.entry(rom).or_insert(self.ids.get_next_rom());
-            rom_ids.push(*rom_id);
+            match self.roms.get(&rom) {
+                Some(rom_id) => {
+                    rom_ids.push((*rom_id, rom));
+                }
+                None => {
+                    let id = self.ids.get_next_rom();
+                    self.roms.insert(rom.clone(), id);
+                    rom_ids.push((id, rom));
+                }
+            }
         });
 
-        self.add_roms_for_game(game_name, rom_ids);
+        rom_ids
     }
 
-    fn add_roms_for_game(&mut self, game_name: String, rom_ids: Vec<u32>) {
+    fn add_roms_for_game(&mut self, game_name: String, rom_ids: Vec<(u32, String)>) {
         self.game_roms.insert(game_name, rom_ids);
     }
 
@@ -114,7 +122,7 @@ impl <'d> DBWriter<'d> {
         self.create_table_disks()?;
         self.create_table_game_disks()?;
         self.create_table_samples()?;
-        self.create_table_game_samples()?;
+        //self.create_table_game_samples()?;
 
         Ok(())
     }
@@ -172,6 +180,7 @@ impl <'d> DBWriter<'d> {
         debug!("Creating Games indexes");
         // Indexes
         self.conn.execute( "CREATE INDEX games_parents ON games(clone_of);", params![])?;
+        self.conn.execute( "CREATE INDEX games_samples ON games(sample_of);", params![])?;
 
         Ok(())
     }
@@ -269,7 +278,7 @@ impl <'d> DBWriter<'d> {
         Ok(())
     }
 
-    fn create_table_game_samples(&self) -> Result <()> {
+    /*fn create_table_game_samples(&self) -> Result <()> {
         debug!("Creating Games/Samples table");
         self.remove_table_if_exist("game_samples")?;
         // Machine/Roms
@@ -285,42 +294,35 @@ impl <'d> DBWriter<'d> {
         self.conn.execute( "CREATE INDEX game_samples_sample ON game_samples(sample_set);", params![])?;
 
         Ok(())
-    }
+    }*/
 
     fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<(u32, String)>> {
+        // We search the database
         let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?;
-
         let mut rom_name_pair: Vec<(u32, String)> = rom_ids.found.iter().map(|rom|{
             (rom.0, rom.1.name.clone())
         }).collect();
 
-        let mut rom_row_id = self.ids.rom;
-        let tx = self.conn.transaction()?;
-
-        for rom in rom_ids.not_found {
-            tx.execute(
-                "INSERT INTO roms (id, sha1, md5, crc, size, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6);",
-                params![ rom_row_id, rom.sha1, rom.md5, rom.crc, rom.size, rom.status ])
-                .and_then(|i| {
-                    rom_name_pair.push((rom_row_id, rom.name));
-                    rom_row_id = rom_row_id + i as u32;
-                    Ok(())
-                })?;
-        }
-        match tx.commit() {
-            Ok(_) => { self.ids.rom = rom_row_id }
-            Err(e) => { error!("Error inserting roms: {}", e) }
-        }
+        // We add in the buffer what is not in the database
+        let mut in_buffer: Vec<(u32, String)> = self.buffer.add_roms(rom_ids.not_found).into_iter().map(|rom| {
+            (rom.0, rom.1.name)
+        }).collect();
+        rom_name_pair.append(&mut in_buffer);
 
         // We remove the duplicates
         rom_name_pair.sort();
         rom_name_pair.dedup();
+        // println!("ROMS {:?}", rom_name_pair);
         Ok(rom_name_pair)
     }
 
-    fn write_game_buffer(&mut self) -> Result<()> {
+    fn write_buffer(&mut self) -> Result<()> {
         let tx = self.conn.transaction()?;
         let game_buffer = &self.buffer.games;
+        let rom_buffer = &self.buffer.roms;
+        let game_rom_buffer = &self.buffer.game_roms;
+        let sample_buffer = &self.buffer.samples;
+
         let values = game_buffer.values();
         for value in values {
             let game = value;
@@ -339,8 +341,47 @@ impl <'d> DBWriter<'d> {
                 }
         }
 
+        for rom_data in rom_buffer {
+            let rom_row_id = rom_data.1;
+            let rom = rom_data.0;
+            tx.execute(
+                "INSERT INTO roms (id, sha1, md5, crc, size, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6);",
+                params![ rom_row_id, rom.sha1, rom.md5, rom.crc, rom.size, rom.status ])?;
+        }
+
+        for game_roms in game_rom_buffer {
+            let game_name = game_roms.0;
+            let rom_id_names = game_roms.1;
+            for rom_id_name in rom_id_names {
+                let result = tx.execute(
+                    "INSERT INTO game_roms (game_name, rom_id, name) VALUES (?1, ?2, ?3);",
+                    params![ game_name, rom_id_name.0, rom_id_name.1 ] );
+                match result {
+                    Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.1, rom_id_name.0, game_name) }
+                    Err(e) => { error!("Error adding rom `{}` to the game {}: {}", rom_id_name.1, "", e) }
+                }
+            }
+        }
+
+        for sample_sets in sample_buffer {
+            let sample_set = sample_sets.0;
+            let samples = sample_sets.1;
+            for sample in samples {
+                let result = tx.execute(
+                    "INSERT OR IGNORE INTO samples (sample_set, sample) VALUES (?1, ?2);", 
+                    params![sample_set, sample]);
+                match result {
+                    Ok(_n) => { debug!("Inserted sample `{}` for sample set `{}`", sample, sample_set) }
+                    Err(e) => { error!("Error inserting sample `{}` for sample set `{}`: {}", sample, sample_set, e) }
+                }
+            }
+        }
+
         tx.commit()?;
         self.buffer.games.clear();
+        self.buffer.roms.clear();
+        self.buffer.game_roms.clear();
+        self.buffer.samples.clear();
 
         Ok(())
     }
@@ -361,31 +402,22 @@ impl <'d> DBWriter<'d> {
         self.buffer.add_game(game_name, game); 
 
         if self.buffer.len() as u16 >= self.buffer_size {
-            self.write_game_buffer()?;
+            self.write_buffer()?;
         };
 
         Ok(())
     }
 
     fn add_roms_for_game(&mut self, roms: Vec<DataFile>, game_name: &str) -> Result<()> {
-        let rom_list = self.get_rom_ids(roms);
+        let rom_list = self.get_rom_ids(roms)?;
 
-        match rom_list {
-            Ok(rom_id_names) => {
-                let tx = self.conn.transaction()?;
-                for rom_id_name in rom_id_names {
-                    let result = tx.execute(
-                        "INSERT INTO game_roms (game_name, rom_id, name) VALUES (?1, ?2, ?3);",
-                        params![ game_name, rom_id_name.0, rom_id_name.1 ] );
-                    match result {
-                        Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.1, rom_id_name.0, game_name) }
-                        Err(e) => { error!("Error adding rom `{}` to the game {}: {}", rom_id_name.1, "", e) }
-                    }
-                }
-                tx.commit()?;
-            }
-            Err(e) => { error!("Error retrieving and inserting roms: {}", e) }
-        };
+        self.buffer.add_roms_for_game(game_name.to_string(), rom_list);
+
+        Ok(())
+    }
+
+    fn add_samples(&mut self, samples: Vec<String>, sample_pack: &str) -> Result<()> {
+        self.buffer.add_sample_pack(sample_pack.to_string(), samples);
 
         Ok(())
     }
@@ -406,7 +438,7 @@ impl <'d> DataWriter for DBWriter<'d> {
         self.add_roms_for_game(roms, game_name)?;
         //self.add_disks_for_game(disks, game_name)?;
         if let Some(sample_name) = sample {
-            //self.add_samples_for_game(samples, sample_name, game_name)?;
+            self.add_samples(samples, sample_name)?;
         }
         //self.add_devices_for_game(device_refs, game_name)?;
 
@@ -414,7 +446,7 @@ impl <'d> DataWriter for DBWriter<'d> {
     }
 
     fn finish(&mut self) -> Result<()> {
-        self.write_game_buffer()?;
+        self.write_buffer()?;
         let roms_from_parents = self.get_roms_from_parents()?;
 
         let tx = self.conn.transaction()?;

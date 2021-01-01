@@ -1,6 +1,7 @@
-use std::{collections::HashSet, iter::FromIterator, collections::HashMap};
+use std::{collections::HashMap, collections::HashSet, fmt::Display, iter::FromIterator};
 
 use anyhow::Result;
+use console::Style;
 use log::{debug, error, warn};
 use rusqlite::{Connection, ToSql, params};
 
@@ -23,6 +24,27 @@ impl SearchRomIds {
 
     fn add_not_found(&mut self, rom: DataFile) {
         self.not_found.push(rom);
+    }
+}
+
+pub struct DBReport {
+    pub games: u32,
+    pub roms: u32,
+    pub roms_in_games: u32,
+    pub samples: u32,
+}
+
+impl DBReport {
+    pub fn new() -> Self { Self { games: 0, roms: 0, roms_in_games: 0, samples: 0 } }
+}
+
+impl Display for DBReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{}", Style::new().bold().yellow().apply_to("Database info"))?;
+        writeln!(f, "- Games: {}", self.games)?;
+        writeln!(f, "- Roms: {}", self.roms)?;
+        writeln!(f, "- Roms in Games: {}", self.roms_in_games)?;
+        writeln!(f, "- Samples: {}", self.samples)
     }
 }
 
@@ -82,13 +104,34 @@ impl <'d> DBReader <'d>{
         Ok(Vec::from_iter(roms))
     }
 
-    pub fn get_stats(&self) -> Result<String> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM game_roms;")?;
-        let result: u32 = stmt.query_row(params![], |row| {
+    pub fn get_stats(&self) -> Result<DBReport> {
+        let mut db_report = DBReport::new();
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM games;")?;
+        let games: u32 = stmt.query_row(params![], |row| {
             Ok(row.get(0)?)
         })?;
+        db_report.games = games;
 
-        return Ok(format!("{} games", result))
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM roms;")?;
+        let roms: u32 = stmt.query_row(params![], |row| {
+            Ok(row.get(0)?)
+        })?;
+        db_report.roms = roms;
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM game_roms;")?;
+        let roms_in_games: u32 = stmt.query_row(params![], |row| {
+            Ok(row.get(0)?)
+        })?;
+        db_report.roms_in_games = roms_in_games;
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM samples;")?;
+        let samples: u32 = stmt.query_row(params![], |row| {
+            Ok(row.get(0)?)
+        })?;
+        db_report.samples = samples;
+
+        return Ok(db_report);
     }
 
     fn get_rom_ids_from_files(&self, roms: Vec<DataFile>) -> Result<SearchRomIds> {
@@ -416,9 +459,9 @@ mod tests {
         let rom_ids = result.found;
         let not_found = result.not_found;
 
-        assert!(rom_ids.len() == 1);
-        assert!(rom_ids[0].0 == 4);
-        assert!(not_found.len() == 0);
+        assert_eq!(rom_ids.len(), 1);
+        assert_eq!(rom_ids[0].0, 4);
+        assert_eq!(not_found.len(), 0);
 
         Ok(())
     }

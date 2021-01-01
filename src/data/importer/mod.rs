@@ -1,54 +1,58 @@
 
-use std::{fs::File, fs, io::{BufRead, BufReader}, path::Path, str};
+use std::{fs::File, io::{BufRead, BufReader}, path::Path, str};
 use log::{debug, error, info};
 use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
-use crate::{sysout::DatImporterReporter, data::writer::*, err, error::RomstError};
+use crate::{data::writer::*, err, error::RomstError};
 
 use super::models::{game::Game, file::DataFile, file::FileType};
 
-pub struct DatImporter<T: BufRead, W: DataWriter> {
-    reader: Reader<T>,
+pub struct DatImporter<R: BufRead, W: DataWriter> {
+    reader: Reader<R>,
     writer: W,
-    reporter: DatImporterReporter,
+    reporter: Option<Box<dyn DatImporterReporter>>,
 }
 
-impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
-    pub fn from_path(path: &impl AsRef<Path>, writer: W) -> DatImporter<BufReader<File>, W> {
-        let file_size = fs::metadata(path).unwrap().len();
-        let reporter = DatImporterReporter::new(file_size);
+pub trait DatImporterReporter {
+    fn update_position(&mut self, bytes: u64, new_entries: u32);
+    fn start_finish(&self);
+    fn finish(&self);
+}
+
+impl<W: DataWriter> DatImporter<BufReader<File>, W> {
+    pub fn from_path(path: &impl AsRef<Path>, writer: W) -> Self {
         DatImporter {
             reader: Reader::from_file(path).unwrap(),
             writer,
-            reporter,
+            reporter: None,
         }
     }
+}
 
-    fn reader(&self) -> &Reader<T> {
-        &self.reader
-    }
-
-    fn reader_mut(&mut self) -> &mut Reader<T> {
-        &mut self.reader
+impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
+    pub fn set_reporter(&mut self, reporter: Box<dyn DatImporterReporter>) {
+        self.reporter = Some(reporter);
     }
 
     fn report_new_entry(&mut self, new_entries: u32) {
         let buf_pos = self.buf_pos() as u64;
-        self.reporter.update_position(buf_pos, new_entries);
+        if let Some(reporter) = self.reporter.as_mut() {
+            reporter.update_position(buf_pos, new_entries);
+        }
     }
 
     fn buf_pos(&self) -> usize {
-        self.reader().buffer_position()
+        self.reader.buffer_position()
     }
 
     pub fn load_dat(&mut self) -> Result<()> {
-        self.reader_mut().trim_text(true);
+        self.reader.trim_text(true);
 
         self.writer.init()?;
 
         let mut buf = Vec::new();
         loop {
-            match self.reader_mut().read_event(&mut buf)? {
+            match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
                         match name.to_lowercase().as_str() {
@@ -64,9 +68,13 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
                     }
                 },
                 Event::Eof => {
-                    self.reporter.start_finish();
+                    if let Some(reporter) = self.reporter.as_ref() {
+                        reporter.start_finish();
+                    }
                     self.writer.finish()?;
-                    self.reporter.finish();
+                    if let Some(reporter) = self.reporter.as_ref() {
+                        reporter.finish();
+                    }
                     break
                 }, 
                 _ => (),
@@ -81,7 +89,7 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
     fn read_datafile(&mut self) -> Result<()> {
         let mut buf = Vec::new();
         loop {
-            match self.reader_mut().read_event(&mut buf)? {
+            match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
                         match name.to_lowercase().as_str() {
@@ -115,7 +123,7 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
         let mut buf = Vec::new();
         let tag = tag_name.to_lowercase();
         loop {
-            match self.reader_mut().read_event(&mut buf)? {
+            match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     self.consume_tag(String::from_utf8(e.name().to_vec())?)?;
                 },
@@ -141,25 +149,25 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
     fn get_text(&mut self) -> Result<String> {
         let mut buf = Vec::new();
         let text;
-        match self.reader_mut().read_event(&mut buf)? {
+        match self.reader.read_event(&mut buf)? {
             Event::Text(t) => {
-                text = t.unescape_and_decode(self.reader())?
+                text = t.unescape_and_decode(&self.reader)?
             },
             Event::End(_e) => {
                 return Ok(String::from(""));
             },
             Event::Eof => return err!(RomstError::UnexpectedEOF),
             _e => return err!(RomstError::UnexpectedXMLTag {
-                position: self.reader().buffer_position()
+                position: self.reader.buffer_position()
             }),
         }
 
-        match self.reader_mut().read_event(&mut buf)? {
+        match self.reader.read_event(&mut buf)? {
             Event::End(_e) => {
                 return Ok(text);
             },
             Event::Eof => return err!(RomstError::UnexpectedEOF),
-            _e => return err!(RomstError::UnexpectedXMLTag { position: self.reader().buffer_position() }),
+            _e => return err!(RomstError::UnexpectedXMLTag { position: self.reader.buffer_position() }),
         }
     }
 
@@ -186,7 +194,7 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
     fn read_dat_header(&mut self) -> Result<()> {
         let mut buf = Vec::new();
         loop {
-            match self.reader_mut().read_event(&mut buf)? {
+            match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
                         match name.to_lowercase().as_str() {
@@ -236,7 +244,7 @@ impl<T: BufRead, W: DataWriter> DatImporter<T, W> {
 
         let mut buf = Vec::new();
         loop {
-            match self.reader_mut().read_event(&mut buf)? {
+            match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
                         match name.to_lowercase().as_str() {
@@ -428,7 +436,8 @@ mod tests {
         let initialized = Rc::clone(&writer.initialized);
 
         let path = Path::new("testdata").join("test.dat");
-        let mut importer = DatImporter::<BufReader<File>, MemoryWriter>::from_path(&path, writer);
+        let mut importer =
+            DatImporter::from_path(&path, writer);
         importer.load_dat()?;
         
         assert!(*initialized.borrow());

@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use crate::{error::RomstError, err, filesystem};
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FileType {
     Rom,
     Disk,
@@ -24,7 +24,7 @@ impl Display for FileType {
     }
 }
 
-#[derive(Debug, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct DataFile {
     pub file_type: FileType,
     pub name: String,

@@ -21,6 +21,8 @@ enum SubCommand {
     SetInfo(SetInfo),
     #[clap(about = "Shows which sets a Rom is used")]
     RomUsage(RomUsage),
+    #[clap(about = "Gets info from the database")]
+    DbInfo(DbInfo),
 }
 
 #[derive(Clap)]
@@ -53,6 +55,12 @@ struct RomUsage {
     rom: Option<String>,
     #[clap(short, long, about = "Sets the romset mode, can be either `merge`, `non-merged` or `split`. Default is `non-merged`")]
     set_mode: Option<RomsetMode>,
+}
+
+#[derive(Clap)]
+struct DbInfo {
+    #[clap(short, long, about = "The ROMST database to use. You can create one with the import command.")]
+    db: String,
 }
 
 fn main() {
@@ -112,6 +120,18 @@ fn main() {
                 Err(e) => { println!("{} getting roms info.\n{}",
                     Style::new().red().apply_to("ERROR"),
                     e); }
+            }
+        },
+        SubCommand::DbInfo(db_info) => {
+            match Romst::get_db_info(db_info.db) {
+                Ok(info) => {
+                    println!("{}", info)
+                }
+                Err(e) => {
+                    println!("{} getting roms info.\n{}",
+                        Style::new().red().apply_to("ERROR"),
+                        e);
+                }
             }
         }
     }

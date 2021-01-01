@@ -1,12 +1,14 @@
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
+use crate::data::importer::DatImporterReporter;
+
 #[derive(Debug)]
-pub struct DatImporterReporter {
+pub struct DatImporterReporterSysOut {
     progress_bar: ProgressBar,
     entries: u32,
 }
 
-impl DatImporterReporter {
+impl DatImporterReporterSysOut {
     pub fn new(total_bytes: u64) -> Self { 
         let progress_bar = ProgressBar::new(total_bytes);
         progress_bar.set_style(ProgressStyle::default_bar()
@@ -14,19 +16,21 @@ impl DatImporterReporter {
             .progress_chars("#>-"));   
         Self { progress_bar, entries: 0 }
     }
+}
 
-    pub fn update_position(&mut self, bytes: u64, new_entries: u32) {
+impl DatImporterReporter for DatImporterReporterSysOut {
+    fn update_position(&mut self, bytes: u64, new_entries: u32) {
         self.entries = self.entries + new_entries;
 
         self.progress_bar.set_position(bytes);
         self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
     }
 
-    pub fn start_finish(&self) {
+    fn start_finish(&self) {
         self.progress_bar.set_message(&format!("Finishing..."));
     }
 
-    pub fn finish(&self) {
+    fn finish(&self) {
         self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
         self.progress_bar.finish_with_message(&format!("Total Entries #{}", self.entries));
     }

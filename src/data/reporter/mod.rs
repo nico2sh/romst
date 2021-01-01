@@ -135,15 +135,15 @@ impl<R: DataReader> Reporter<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::{io::BufReader, fs::File, path::Path};
+    use std::path::Path;
     use rusqlite::{Connection, OpenFlags};
-    use crate::data::{importer::DatImporter, reader::sqlite::DBReader, writer::{sqlite::DBWriter, DataWriter}};
+    use crate::data::{importer::DatImporter, reader::sqlite::DBReader, writer::sqlite::DBWriter};
     use super::*;
 
     fn get_db_connection<'a, 'b>(dat_path: &'b impl AsRef<Path>) -> Result<Connection> {
         let mut conn = Connection::open_in_memory_with_flags(OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
         let writer = DBWriter::from_connection(&mut conn, 100);
-        let mut importer = DatImporter::<BufReader<File>, DBWriter>::from_path(dat_path, writer);
+        let mut importer = DatImporter::from_path(dat_path, writer);
         match importer.load_dat() {
             Ok(_) => {}
             Err(e) => { println!("ERROR {:?}", e);}
