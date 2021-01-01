@@ -53,8 +53,17 @@ impl<R: DataReader> Reporter<R> {
             if path.is_file() {
                 match self.file_reader.get_game_set(&path, FileChecks::ALL) {
                     Ok(game_set) => {
-                        let file_report = self.on_set_found(game_set, rom_mode)?;
-                        Some(file_report)
+                        let game_name = game_set.game.name.clone();
+                        let file_report = self.on_set_found(game_set, rom_mode);
+                        match file_report {
+                            Ok(fr) => {
+                                Some(fr)
+                            }
+                            Err(e) => { 
+                                error!("Error getting report for game set `{}`: {}", game_name, e);
+                                None
+                            }
+                        }
                     },
                     Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
                         warn!("File {} is not a valid file", file_name);

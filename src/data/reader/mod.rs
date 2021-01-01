@@ -2,7 +2,7 @@ pub mod sqlite;
 
 use std::{fmt::Display, collections::{HashMap, HashSet}};
 
-use crate::RomsetMode;
+use crate::{RomsetMode, err, error::RomstError};
 
 use super::models::{file::DataFile, game::Game, set::GameSet};
 use anyhow::Result;
@@ -54,11 +54,14 @@ pub trait DataReader {
     fn get_game(&self, game_name: &String) -> Option<Game>;
     fn get_romset_roms(&self, game_name: &String, rom_mode: RomsetMode) -> Result<Vec<DataFile>>;
     fn get_game_set(&self, game_name: &String, rom_mode: RomsetMode) -> Result<GameSet> {
-        let game = self.get_game(game_name)?;
-        let roms = self.get_romset_roms(game_name, rom_mode)?;
-
-        let game_set = GameSet::new(game, roms, vec![], vec![]);
-        Ok(game_set)
+        match self.get_game(game_name) {
+            Some(game) => {
+                let roms = self.get_romset_roms(game_name, rom_mode)?;
+                let game_set = GameSet::new(game, roms, vec![], vec![]);
+                Ok(game_set)
+            }
+            None => err!(RomstError::GenericError{ message: format!("Game {} not found", game_name) }),
+        }
     }
     /// Finds where this rom is included, in other games. Returns the games and the name used for that rom
     fn find_rom_usage(&self, game_name: &String, rom_name: &String, rom_mode: RomsetMode) -> Result<RomSearch>;
