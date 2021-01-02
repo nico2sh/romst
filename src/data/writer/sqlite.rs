@@ -36,12 +36,26 @@ struct Buffer {
     games: HashMap<String, Rc<Game>>,
 
     roms: HashMap<DataFileInfo, u32>,
-    game_roms: HashMap<String, Vec<(u32, String)>>,
+    game_roms: HashMap<String, Vec<GameRomBufferItem>>,
     samples: HashMap<String, HashSet<String>>,
     device_refs: HashMap<String, HashSet<String>>,
     disks: HashMap<DataFile, u32>,
     game_disks: HashMap<String, Vec<u32>>,
 }
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct GameRomBufferItem {
+    name: String,
+    rom_id: u32,
+    status: Option<String>
+}
+
+impl GameRomBufferItem {
+    fn from_data_file(rom_id: u32, data_file: DataFile) -> Self {
+        Self { name: data_file.name, rom_id, status: data_file.status } 
+    }
+}
+
 
 impl Buffer {
     fn new() -> Self {
@@ -83,7 +97,7 @@ impl Buffer {
         rom_ids
     }
 
-    fn add_roms_for_game(&mut self, game_name: String, rom_ids: Vec<(u32, String)>) {
+    fn add_roms_for_game(&mut self, game_name: String, rom_ids: Vec<GameRomBufferItem>) {
         self.game_roms.insert(game_name, rom_ids);
     }
 
@@ -310,22 +324,22 @@ impl <'d> DBWriter<'d> {
         Ok(())
     }
 
-    fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<(u32, String)>> {
+    fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<GameRomBufferItem>> {
         // We search the database
         let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?;
 
-        let mut rom_name_pair: Vec<(u32, String)> = rom_ids.found.into_iter().map(|rom|{
-            (rom.0, rom.1.name)
+        let mut rom_name_pair: Vec<GameRomBufferItem> = rom_ids.found.into_iter().map(|rom|{
+            GameRomBufferItem::from_data_file(rom.0, rom.1)
         }).collect();
 
         // We add in the buffer what is not in the database
-        let mut in_buffer: Vec<(u32, String)> = self.buffer.add_roms(rom_ids.not_found).into_iter().map(|rom| {
-            (rom.0, rom.1.name)
+        let mut in_buffer: Vec<GameRomBufferItem> = self.buffer.add_roms(rom_ids.not_found).into_iter().map(|rom| {
+            GameRomBufferItem::from_data_file(rom.0, rom.1)
         }).collect();
 
         in_buffer.extend(self.buffer.add_roms(rom_ids.ignored).into_iter().map(|rom| {
-            (rom.0, rom.1.name)
-        }).collect::<Vec<(u32, String)>>());
+            GameRomBufferItem::from_data_file(rom.0, rom.1)
+        }).collect::<Vec<GameRomBufferItem>>());
 
         rom_name_pair.append(&mut in_buffer);
 
@@ -381,11 +395,11 @@ impl <'d> DBWriter<'d> {
             let rom_id_names = game_roms.1;
             for rom_id_name in rom_id_names {
                 let result = tx.execute(
-                    "INSERT INTO game_roms (game_name, rom_id, name) VALUES (?1, ?2, ?3);",
-                    params![ game_name, rom_id_name.0, rom_id_name.1 ] );
+                    "INSERT INTO game_roms (game_name, rom_id, name, status) VALUES (?1, ?2, ?3, ?4);",
+                    params![ game_name, rom_id_name.rom_id, rom_id_name.name, rom_id_name.status ] );
                 match result {
-                    Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.1, rom_id_name.0, game_name) }
-                    Err(e) => { error!("Error adding rom `{}` to the game {}: {}", rom_id_name.1, "", e) }
+                    Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.name, rom_id_name.rom_id, game_name) }
+                    Err(e) => { error!("Error adding rom `{}` to the game {}: {}", rom_id_name.name, "", e) }
                 }
             }
         }
