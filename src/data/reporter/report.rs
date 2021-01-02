@@ -110,7 +110,7 @@ impl SetReport {
         }
     }
 
-    pub fn from_data(name: String, roms_have: Vec<DataFile>, roms_to_rename: Vec<FileRename>, roms_missing: Vec<DataFile>, roms_unneeded: Vec<DataFile>) -> Self {
+    pub fn from_data(name: String, roms_have: Vec<DataFile>, roms_to_rename: Vec<FileRename>, roms_missing: Vec<DataFile>) -> Self {
         Self { name, roms_have, roms_to_rename, roms_missing }
     }
 

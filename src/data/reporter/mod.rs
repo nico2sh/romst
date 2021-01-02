@@ -48,7 +48,7 @@ impl<R: DataReader> Reporter<R> {
     }
 
     fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
-        let r: Vec<FileReport> = file_paths.iter().filter_map(|fp| {
+        let r: Vec<FileReport> = file_paths.into_iter().filter_map(|fp| {
             let path = fp.as_ref();
             if path.is_file() {
                 match self.file_reader.get_game_set(&path, FileChecks::ALL) {
@@ -66,11 +66,8 @@ impl<R: DataReader> Reporter<R> {
                         }
                     },
                     Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
-                        warn!("File {} is not a valid file", file_name);
-                        let file_name = path.to_path_buf().into_os_string().into_string().unwrap_or_else(|ref osstring| {
-                            osstring.to_string_lossy().to_string()
-                        });
-                        // TODO: Unknown file, fix
+                        warn!("File `{}` is not a valid file", file_name);
+                        // TODO: Unknown file, fix. FileReport type wrong?
                         None
                     },
                     Err(e) => {
@@ -109,10 +106,10 @@ impl<R: DataReader> Reporter<R> {
         Ok(file_report)
     }
 
-    pub fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> {
+    fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> {
         let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
 
-        let mut report = SetReport::new(set_name);
+        let mut report = SetReport::new(set_name.clone());
 
         roms.into_iter().for_each(|rom| {
             let found_rom = db_roms.iter().position(|set_rom| {
@@ -130,7 +127,7 @@ impl<R: DataReader> Reporter<R> {
                     }
                 }
                 None => {
-                    warn!("Rom `{}` couldn't be matched", rom);
+                    warn!("Rom `{}` couldn't be matched for set `{}`", rom, set_name);
                 }
             }
         });

@@ -5,7 +5,7 @@ use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
 use crate::{data::writer::*, err, error::RomstError};
 
-use super::models::{game::Game, file::DataFile, file::FileType};
+use super::models::{file::DataFile, file::{DataFileInfo, FileType}, game::Game};
 
 pub struct DatImporter<R: BufRead, W: DataWriter> {
     reader: Reader<R>,
@@ -348,26 +348,28 @@ fn device_ref(attributes: Attributes) -> Option<String> {
 }
 
 fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<DataFile> {
-    let mut data_file = DataFile::new(file_type, "".to_string());
+    let mut data_file_info = DataFileInfo::new(file_type);
+    let mut file_name = None;
+    let mut status = None;
 
     process_attributes(attributes, |key, value| {
         match key.to_lowercase().as_str() {
-            "name" => data_file.name = String::from(value),
-            "sha1" => data_file.info.sha1 = Some(String::from(value)),
-            "md5" => data_file.info.md5 = Some(String::from(value)),
-            "crc" => data_file.info.crc = Some(String::from(value)),
-            "size" => data_file.info.size = value.parse::<u32>().ok(),
+            "name" => file_name = Some(value.to_string()),
+            "sha1" => data_file_info.sha1 = Some(String::from(value)),
+            "md5" => data_file_info.md5 = Some(String::from(value)),
+            "crc" => data_file_info.crc = Some(String::from(value)),
+            "size" => data_file_info.size = value.parse::<u32>().ok(),
             "serial" => debug!("Ignoring serial attribute from file"),
-            "status" => data_file.info.status = Some(String::from(value)),
+            "status" => status = Some(String::from(value)),
             k => debug!("Unknown atribute parsing: {}", k),
         }
     });
 
-    if data_file.name.eq("") {
+    if let Some(name) = file_name {
+        Ok(DataFile::new_with_status(name, data_file_info, status))
+    } else {
         error!("Found file without name, not adding");
         err!(RomstError::ParsingError { message: "File without name".to_string() })
-    } else {
-        Ok(data_file)
     }
 }
 

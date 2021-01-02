@@ -178,15 +178,15 @@ impl <'d> DBWriter<'d> {
                 sha1    TEXT,
                 md5     TEXT,
                 crc     TEXT,
-                size    INT,
-                status  TEXT);", 
+                size    INT);", 
             params![])?;
         debug!("Creating ROMS indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX roms_sha1 ON roms(sha1);", params![])?;
-        self.conn.execute( "CREATE INDEX roms_md5 ON roms(md5);", params![])?;
-        self.conn.execute( "CREATE INDEX roms_crc ON roms(crc);", params![])?;
-        self.conn.execute( "CREATE INDEX roms_checks ON roms(sha1, md5, crc);", params![])?;
+        self.conn.execute("CREATE UNIQUE INDEX roms_unique ON roms(sha1, md5, crc, size)", params![])?;
+        self.conn.execute("CREATE INDEX roms_sha1 ON roms(sha1);", params![])?;
+        self.conn.execute("CREATE INDEX roms_md5 ON roms(md5);", params![])?;
+        self.conn.execute("CREATE INDEX roms_crc ON roms(crc);", params![])?;
+        self.conn.execute("CREATE INDEX roms_checks ON roms(sha1, md5, crc);", params![])?;
 
         Ok(())
     }
@@ -208,8 +208,8 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating Games indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX games_parents ON games(clone_of);", params![])?;
-        self.conn.execute( "CREATE INDEX games_samples ON games(sample_of);", params![])?;
+        self.conn.execute("CREATE INDEX games_parents ON games(clone_of);", params![])?;
+        self.conn.execute("CREATE INDEX games_samples ON games(sample_of);", params![])?;
 
         Ok(())
     }
@@ -223,14 +223,15 @@ impl <'d> DBWriter<'d> {
                 game_name   TEXT,
                 rom_id      INTEGER,
                 name        TEXT,
+                status      TEXT,
                 parent      TEXT,
                 PRIMARY KEY (game_name, rom_id, name));",
             params![])?;
         debug!("Creating Games/ROMs indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX game_roms_game ON game_roms(game_name);", params![])?;
-        self.conn.execute( "CREATE INDEX game_roms_rom ON game_roms(rom_id);", params![])?;
-        self.conn.execute( "CREATE INDEX game_roms_parents ON game_roms(parent);", params![])?;
+        self.conn.execute("CREATE INDEX game_roms_game ON game_roms(game_name);", params![])?;
+        self.conn.execute("CREATE INDEX game_roms_rom ON game_roms(rom_id);", params![])?;
+        self.conn.execute("CREATE INDEX game_roms_parents ON game_roms(parent);", params![])?;
 
         Ok(())
     }
@@ -247,8 +248,8 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating devices indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX devices_games ON devices(game_name);", params![])?;
-        self.conn.execute( "CREATE INDEX devices_refs ON devices(device_ref);", params![])?;
+        self.conn.execute("CREATE INDEX devices_games ON devices(game_name);", params![])?;
+        self.conn.execute("CREATE INDEX devices_refs ON devices(device_ref);", params![])?;
 
         Ok(())
     }
@@ -267,8 +268,8 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating disks indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX disks_name ON disks(name);", params![])?;
-        self.conn.execute( "CREATE INDEX disks_sha1 ON disks(sha1);", params![])?;
+        self.conn.execute("CREATE INDEX disks_name ON disks(name);", params![])?;
+        self.conn.execute("CREATE INDEX disks_sha1 ON disks(sha1);", params![])?;
 
         Ok(())
     }
@@ -286,8 +287,8 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating Games/Disks indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX game_disks_game ON game_disks(game_name);", params![])?;
-        self.conn.execute( "CREATE INDEX game_disks_disks ON game_disks(disk_id);", params![])?;
+        self.conn.execute("CREATE INDEX game_disks_game ON game_disks(game_name);", params![])?;
+        self.conn.execute("CREATE INDEX game_disks_disks ON game_disks(disk_id);", params![])?;
 
         Ok(())
     }
@@ -304,7 +305,7 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating samples indexes");
         // Indexes
-        self.conn.execute( "CREATE INDEX sample_sets ON samples(sample_set);", params![])?;
+        self.conn.execute("CREATE INDEX sample_sets ON samples(sample_set);", params![])?;
 
         Ok(())
     }
@@ -312,14 +313,20 @@ impl <'d> DBWriter<'d> {
     fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<(u32, String)>> {
         // We search the database
         let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?;
-        let mut rom_name_pair: Vec<(u32, String)> = rom_ids.found.iter().map(|rom|{
-            (rom.0, rom.1.name.clone())
+
+        let mut rom_name_pair: Vec<(u32, String)> = rom_ids.found.into_iter().map(|rom|{
+            (rom.0, rom.1.name)
         }).collect();
 
         // We add in the buffer what is not in the database
         let mut in_buffer: Vec<(u32, String)> = self.buffer.add_roms(rom_ids.not_found).into_iter().map(|rom| {
             (rom.0, rom.1.name)
         }).collect();
+
+        in_buffer.extend(self.buffer.add_roms(rom_ids.ignored).into_iter().map(|rom| {
+            (rom.0, rom.1.name)
+        }).collect::<Vec<(u32, String)>>());
+
         rom_name_pair.append(&mut in_buffer);
 
         // We remove the duplicates
@@ -359,9 +366,10 @@ impl <'d> DBWriter<'d> {
         for rom_data in rom_buffer {
             let rom_row_id = rom_data.1;
             let rom = rom_data.0;
+
             let result = tx.execute(
-                "INSERT INTO roms (id, sha1, md5, crc, size, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6);",
-                params![ rom_row_id, rom.sha1, rom.md5, rom.crc, rom.size, rom.status ]);
+                "INSERT INTO roms (id, sha1, md5, crc, size) VALUES (?1, ?2, ?3, ?4, ?5);",
+                params![ rom_row_id, rom.sha1, rom.md5, rom.crc, rom.size ]);
             match result {
                 Ok(_n) => { debug!("Inserted rom {} with id {}", rom, rom_row_id) }
                 Err(e) => { error!("Error adding rom `{}` with id `{}`: {}", rom, rom_row_id, e) }
@@ -513,5 +521,33 @@ impl <'d> DataWriter for DBWriter<'d> {
 
         Ok(())
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::IdsCounter;
+
+    #[test]
+    fn test_counter() {
+        let mut counter = IdsCounter::new();
+        let rom_count_1 = counter.get_next_rom();
+        let rom_count_2 = counter.get_next_rom();
+
+        assert_eq!(0, rom_count_1);
+        assert_eq!(1, rom_count_2);
+    }
+
+    #[test]
+    fn test_counter_to_100() {
+        let mut counter = IdsCounter::new();
+        let mut nums = vec![];
+
+        for _ in 0..100 {
+            nums.push(counter.get_next_rom())
+        }
+
+        for i in 0..100 {
+            assert_eq!(i as u32, nums[i])
+        }
+    }
 }

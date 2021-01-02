@@ -76,8 +76,8 @@ impl FileReader {
                             md5,
                             crc,
                             size,
-                            status: None,
-                        }
+                        },
+                        status: None
                     };
                     
                     roms.push(rom);

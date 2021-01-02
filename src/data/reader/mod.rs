@@ -51,25 +51,25 @@ impl RomSearch {
 }
 
 pub trait DataReader {
-    fn get_game(&self, game_name: &String) -> Option<Game>;
-    fn get_romset_roms(&self, game_name: &String, rom_mode: RomsetMode) -> Result<Vec<DataFile>>;
-    fn get_game_set(&self, game_name: &String, rom_mode: RomsetMode) -> Result<GameSet> {
-        match self.get_game(game_name) {
+    fn get_game<S>(&self, game_name: S) -> Option<Game> where S: AsRef<str> + rusqlite::ToSql;
+    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DataFile>> where S: AsRef<str> + rusqlite::ToSql;
+    fn get_game_set<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<GameSet> where S: AsRef<str> + rusqlite::ToSql {
+        match self.get_game(&game_name) {
             Some(game) => {
                 let roms = self.get_romset_roms(game_name, rom_mode)?;
                 let game_set = GameSet::new(game, roms, vec![], vec![]);
                 Ok(game_set)
             }
-            None => err!(RomstError::GenericError{ message: format!("Game {} not found", game_name) }),
+            None => err!(RomstError::GenericError{ message: format!("Game {} not found", game_name.as_ref()) }),
         }
     }
     /// Finds where this rom is included, in other games. Returns the games and the name used for that rom
-    fn find_rom_usage(&self, game_name: &String, rom_name: &String, rom_mode: RomsetMode) -> Result<RomSearch>;
+    fn find_rom_usage<S>(&self, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql;
     /// Gets all romsets that include roms in the searched game
     /// This is useful to know what new (incomplete though) sets can be generated from the current one
-    fn get_romset_shared_roms(&self, game_name: &String, rom_mode: RomsetMode) -> Result<RomSearch>;
+    fn get_romset_shared_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql;
 
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch>;
 
-    fn get_devices_for_game(&self, game_name: &String) -> Result<Vec<String>>;
+    fn get_devices_for_game<S>(&self, game_name: S) -> Result<Vec<String>> where S: AsRef<str> + rusqlite::ToSql;
 }

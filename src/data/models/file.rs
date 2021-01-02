@@ -28,6 +28,7 @@ impl Display for FileType {
 pub struct DataFile {
     pub name: String,
     pub info: DataFileInfo,
+    pub status: Option<String>,
 }
 
 impl PartialEq for DataFile {
@@ -59,7 +60,88 @@ impl Display for DataFile {
         let mut rom_data = vec![];
         rom_data.push(format!("name: {}", self.name));
 
-        write!(f, "{} - {}", self.name, self.info)
+        write!(f, "{} - {}", self.name, self.info)?;
+        if let Some(status) = &self.status {
+            write!(f, "({})", status)?;
+        };
+
+        Ok(())
+    }
+}
+
+impl DataFile {
+    pub fn new<S>(name: S, file_info: DataFileInfo) -> Self where S: Into<String> {
+        Self {
+            name: name.into(),
+            info: file_info,
+            status: None
+        }
+    }
+
+    pub fn new_with_status<S>(name: S, file_info: DataFileInfo, status: Option<String>) -> Self where S: Into<String> {
+        Self {
+            name: name.into(),
+            info: file_info,
+            status
+        }
+    }
+
+    /// Compares two files with the requested info, if the info is not available in either file, the comparation is ignored
+    pub fn deep_compare(&self, other: &Self, file_checks: FileChecks, include_name: bool) -> Result<bool> {
+        let mut compared = false;
+        let mut result = if include_name {
+            self.name.eq(&other.name)
+        } else {
+            true
+        };
+        
+        if file_checks.contains(FileChecks::SHA1) {
+            result = result && match (self.info.sha1.as_ref(), other.info.sha1.as_ref()) {
+                (Some(self_sha1), Some(other_sha1)) => {
+                    compared = true;
+                    self_sha1.eq(other_sha1)
+                },
+                _ => { true }
+            };
+        }
+
+        if file_checks.contains(FileChecks::MD5) {
+            result = result && match (self.info.md5.as_ref(), other.info.md5.as_ref()) {
+                (Some(self_md5), Some(other_md5)) => {
+                    compared = true;
+                    self_md5.eq(other_md5)
+                },
+                _ => { true }
+            }
+        }
+
+        if file_checks.contains(FileChecks::CRC) {
+            result = result && match (self.info.crc.as_ref(), other.info.crc.as_ref()) {
+                (Some(self_crc), Some(other_crc)) => {
+                    compared = true;
+                    self_crc.eq(other_crc)
+                },
+                _ => { true }
+            }
+        }
+
+        if file_checks.contains(FileChecks::SIZE) {
+            result = result && match (self.info.size.as_ref(), other.info.size.as_ref()) {
+                (Some(self_size), Some(other_size)) => {
+                    compared = true;
+                    self_size.eq(other_size)
+                },
+                _ => { true }
+            }
+        }
+
+        if compared {
+            Ok(result)
+        } else {
+            err!(RomstError::GenericError {
+                message: format!("Can't compare, not enough info:\n{}\n{}", self, other)
+            })
+        }
     }
 }
 
@@ -70,7 +152,6 @@ pub struct DataFileInfo {
     pub md5: Option<String>,
     pub crc: Option<String>,
     pub size: Option<u32>,
-    pub status: Option<String>,
 }
 
 impl DataFileInfo {
@@ -81,16 +162,17 @@ impl DataFileInfo {
             md5: None,
             crc: None,
             size: None,
-            status: None,
         }
     }
 }
 
 impl Hash for DataFileInfo {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.file_type.hash(state);
         self.sha1.hash(state);
         self.md5.hash(state);
         self.crc.hash(state);
+        self.size.hash(state);
     }
 }
 
@@ -170,72 +252,9 @@ impl PartialOrd for DataFileInfo {
     }
 }
 
-impl DataFile {
-    pub fn new(file_type: FileType, name: String) -> Self { Self { name, info: DataFileInfo::new(file_type) } }
-
-    /// Compares two files with the requested info, if the info is not available in either file, the comparation is ignored
-    pub fn deep_compare(&self, other: &Self, file_checks: FileChecks, include_name: bool) -> Result<bool> {
-        let mut compared = false;
-        let mut result = if include_name {
-            self.name.eq(&other.name)
-        } else {
-            true
-        };
-        
-        if file_checks.contains(FileChecks::SHA1) {
-            result = result && match (self.info.sha1.as_ref(), other.info.sha1.as_ref()) {
-                (Some(self_sha1), Some(other_sha1)) => {
-                    compared = true;
-                    self_sha1.eq(other_sha1)
-                },
-                _ => { true }
-            };
-        }
-
-        if file_checks.contains(FileChecks::MD5) {
-            result = result && match (self.info.md5.as_ref(), other.info.md5.as_ref()) {
-                (Some(self_md5), Some(other_md5)) => {
-                    compared = true;
-                    self_md5.eq(other_md5)
-                },
-                _ => { true }
-            }
-        }
-
-        if file_checks.contains(FileChecks::CRC) {
-            result = result && match (self.info.crc.as_ref(), other.info.crc.as_ref()) {
-                (Some(self_crc), Some(other_crc)) => {
-                    compared = true;
-                    self_crc.eq(other_crc)
-                },
-                _ => { true }
-            }
-        }
-
-        if file_checks.contains(FileChecks::SIZE) {
-            result = result && match (self.info.size.as_ref(), other.info.size.as_ref()) {
-                (Some(self_size), Some(other_size)) => {
-                    compared = true;
-                    self_size.eq(other_size)
-                },
-                _ => { true }
-            }
-        }
-
-        if compared {
-            Ok(result)
-        } else {
-            err!(RomstError::GenericError {
-                message: format!("Can't compare, not enough info:\n{}\n{}", self, other)
-            })
-        }
-    }
-}
-
 impl Display for DataFileInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut rom_data = vec![];
-        rom_data.push(format!("File Info:"));
 
         if let Some(sha1) = &self.sha1 {
             rom_data.push(format!("sha1: {}", sha1))
@@ -249,10 +268,7 @@ impl Display for DataFileInfo {
         if let Some(size) = &self.size {
             rom_data.push(format!("size: {}", size))
         }
-        if let Some(status) = &self.status {
-            rom_data.push(format!("status: {}", status))
-        }
 
-        write!(f, "{}: ({})", self.file_type, rom_data.join(", "))
+        write!(f, "[{}] File Info: {}", self.file_type, rom_data.join(", "))
     }
 }
