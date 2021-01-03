@@ -62,7 +62,7 @@ impl Display for DataFile {
 
         write!(f, "{} - {}", self.name, self.info)?;
         if let Some(status) = &self.status {
-            write!(f, "({})", status)?;
+            write!(f, " ({})", status)?;
         };
 
         Ok(())

@@ -39,7 +39,7 @@ pub struct FileReport {
 }
 
 impl FileReport {
-    pub fn new(file_name: String) -> Self { Self { file_name, sets: vec![], unknown: vec![] } }
+    pub fn new<S>(file_name: S) -> Self where S: Into<String> { Self { file_name: file_name.into(), sets: vec![], unknown: vec![] } }
     pub fn add_set(&mut self, set: SetReport) {
         self.sets.push(set);
     }
