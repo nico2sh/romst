@@ -1,8 +1,8 @@
 use clap::Clap;
 use console::Style;
 use env_logger::{Builder, Env, Target};
-use romst::{RomsetMode, Romst};
-use std::path::Path;
+use romst::{RomsetMode, Romst, sysout::DatImporterReporterSysOut};
+use std::{fs, path::Path};
 
 const DB_EXTENSION: &str = "rst";
 
@@ -85,13 +85,26 @@ fn main() {
         SubCommand::Import(f) => {
             let output = f.destination.unwrap_or(String::from(Path::new(&f.file).with_extension(DB_EXTENSION).to_str().unwrap()));
             let overwrite = f.overwrite;
+            let file = f.file;
 
-            match Romst::import_dat(f.file.to_owned(), output, overwrite) {
+            let file_size = match fs::metadata(&file) {
+                Ok(metadata) => { metadata.len() }
+                Err(e) => { 
+                    println!("{} getting file `{}` info.\n{}",
+                        Style::new().red().apply_to("ERROR"),
+                        Style::new().green().apply_to(&file),
+                        e); 
+                    0
+                }
+            };
+
+            let reporter = DatImporterReporterSysOut::new(file_size);
+            match Romst::import_dat(file.to_owned(), output, overwrite, Some(reporter)) {
                 Ok(_) => {}
                 Err(e) => { 
                     println!("{} parsing the file {}.\n{}",
                     Style::new().red().apply_to("ERROR"),
-                    Style::new().green().apply_to(f.file),
+                    Style::new().green().apply_to(file),
                     e); 
                 }
             }

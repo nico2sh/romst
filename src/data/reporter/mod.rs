@@ -65,6 +65,7 @@ impl<R: DataReader> Reporter<R> {
                                     }
                                     None => { "UNKNOWN FILE".to_string() }
                                 };
+
                                 let mut file_report = FileReport::new(file_name);
                                 file_report.sets = sets_and_unknowns.0;
                                 file_report.unknown = sets_and_unknowns.1;

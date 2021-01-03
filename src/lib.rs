@@ -2,14 +2,13 @@ mod data;
 mod error;
 mod filesystem;
 mod macros;
-mod sysout;
+pub mod sysout;
 
 use console::Style;
-use data::{importer::DatImporter, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, reader::{RomSearch, sqlite::DBReport}, reporter::{Reporter, report::Report}, writer::DataWriter, writer::sqlite::DBWriter};
+use data::{importer::{DatImporter, DatImporterReporter}, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, reader::{RomSearch, sqlite::DBReport}, reporter::{Reporter, report::Report}, writer::DataWriter, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use sysout::DatImporterReporterSysOut;
-use std::{fs, path::Path, str::FromStr};
+use std::{path::Path, str::FromStr};
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
@@ -69,7 +68,7 @@ impl Romst {
         Ok(DBWriter::from_connection(conn, 500))
     }
 
-    pub fn import_dat(input: String, output_file: String, overwrite: bool) -> Result<()> {
+    pub fn import_dat<R>(input: String, output_file: String, overwrite: bool, reporter: Option<R>) -> Result<()> where R: DatImporterReporter + 'static {
         println!("Loading file: {}", Style::new().bold().apply_to(&input));
         println!("Output: {}", Style::new().bold().apply_to(&output_file));
 
@@ -80,14 +79,10 @@ impl Romst {
 
         let mut conn = Romst::get_rw_connection(output_file)?;
         let db_writer = DBWriter::from_connection(&mut conn, DEFAULT_WRITE_BUFFER_SIZE);
-        match db_writer.init() {
-            Ok(_) => {},
-            Err(e) => { error!("Error initializing the database: {}", e) }
-        }
         let mut dat_reader = DatImporter::from_path(&input, db_writer);
-        let file_size = fs::metadata(input)?.len();
-        let reporter = DatImporterReporterSysOut::new(file_size);
-        dat_reader.set_reporter(Box::new(reporter));
+        if let Some(r) = reporter {
+            dat_reader.set_reporter(r);
+        }
 
         match dat_reader.load_dat() {
             Ok(_) => info!("Parsing complete"),

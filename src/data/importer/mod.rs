@@ -30,8 +30,8 @@ impl<W: DataWriter> DatImporter<BufReader<File>, W> {
 }
 
 impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
-    pub fn set_reporter(&mut self, reporter: Box<dyn DatImporterReporter>) {
-        self.reporter = Some(reporter);
+    pub fn set_reporter<P>(&mut self, reporter: P) where P: DatImporterReporter + 'static {
+        self.reporter = Some(Box::new(reporter));
     }
 
     fn report_new_entry(&mut self, new_entries: u32) {
