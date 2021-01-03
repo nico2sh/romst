@@ -381,7 +381,7 @@ mod tests {
     fn get_db_connection<'a, 'b>(dat_path: &'b impl AsRef<Path>) -> Result<Connection> {
         let mut conn = Connection::open_in_memory_with_flags(OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
         let writer = DBWriter::from_connection(&mut conn, 5);
-        let mut importer = DatImporter::<BufReader<File>, DBWriter>::from_path(dat_path, writer);
+        let mut importer = DatImporter::<BufReader<File>, DBWriter>::from_path(dat_path, writer)?;
         importer.load_dat()?;
 
         Ok(conn)

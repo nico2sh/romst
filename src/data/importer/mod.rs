@@ -1,5 +1,5 @@
 
-use std::{fs::File, io::{BufRead, BufReader}, path::Path, str};
+use std::{fs::{self, File}, io::{BufRead, BufReader}, path::Path, str};
 use log::{debug, error, info};
 use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
@@ -11,26 +11,31 @@ pub struct DatImporter<R: BufRead, W: DataWriter> {
     reader: Reader<R>,
     writer: W,
     reporter: Option<Box<dyn DatImporterReporter>>,
+    total_bytes: u64,
 }
 
 pub trait DatImporterReporter {
+    fn set_total_bytes(&mut self, total_bytes: u64);
     fn update_position(&mut self, bytes: u64, new_entries: u32);
     fn start_finish(&self);
     fn finish(&self);
 }
 
 impl<W: DataWriter> DatImporter<BufReader<File>, W> {
-    pub fn from_path(path: &impl AsRef<Path>, writer: W) -> Self {
-        DatImporter {
+    pub fn from_path(path: &impl AsRef<Path>, writer: W) ->Result<Self> {
+        let total_bytes = fs::metadata(path)?.len();
+        Ok(DatImporter {
             reader: Reader::from_file(path).unwrap(),
             writer,
             reporter: None,
-        }
+            total_bytes
+        })
     }
 }
 
 impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
-    pub fn set_reporter<P>(&mut self, reporter: P) where P: DatImporterReporter + 'static {
+    pub fn set_reporter<P>(&mut self, mut reporter: P) where P: DatImporterReporter + 'static {
+        reporter.set_total_bytes(self.total_bytes);
         self.reporter = Some(Box::new(reporter));
     }
 
@@ -439,7 +444,7 @@ mod tests {
 
         let path = Path::new("testdata").join("test.dat");
         let mut importer =
-            DatImporter::from_path(&path, writer);
+            DatImporter::from_path(&path, writer)?;
         importer.load_dat()?;
         
         assert!(*initialized.borrow());

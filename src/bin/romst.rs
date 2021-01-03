@@ -87,18 +87,7 @@ fn main() {
             let overwrite = f.overwrite;
             let file = f.file;
 
-            let file_size = match fs::metadata(&file) {
-                Ok(metadata) => { metadata.len() }
-                Err(e) => { 
-                    println!("{} getting file `{}` info.\n{}",
-                        Style::new().red().apply_to("ERROR"),
-                        Style::new().green().apply_to(&file),
-                        e); 
-                    0
-                }
-            };
-
-            let reporter = DatImporterReporterSysOut::new(file_size);
+            let reporter = DatImporterReporterSysOut::new();
             match Romst::import_dat(file.to_owned(), output, overwrite, Some(reporter)) {
                 Ok(_) => {}
                 Err(e) => { 

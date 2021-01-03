@@ -79,12 +79,12 @@ impl Romst {
 
         let mut conn = Romst::get_rw_connection(output_file)?;
         let db_writer = DBWriter::from_connection(&mut conn, DEFAULT_WRITE_BUFFER_SIZE);
-        let mut dat_reader = DatImporter::from_path(&input, db_writer);
+        let mut dat_importer = DatImporter::from_path(&input, db_writer)?;
         if let Some(r) = reporter {
-            dat_reader.set_reporter(r);
+            dat_importer.set_reporter(r);
         }
 
-        match dat_reader.load_dat() {
+        match dat_importer.load_dat() {
             Ok(_) => info!("Parsing complete"),
             Err(e) => error!("Error parsing file: {}", e)
         };
