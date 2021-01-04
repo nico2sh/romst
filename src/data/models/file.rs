@@ -179,32 +179,20 @@ impl Hash for DataFileInfo {
 impl PartialEq for DataFileInfo {
     fn eq(&self, other: &Self) -> bool {
         // We are good just with the sha1
-        match (self.sha1.as_ref(), other.sha1.as_ref()) {
-            (Some(self_sha1), Some(other_sha1)) => {
-                return self_sha1.eq(other_sha1);
-            },
-            _ => { }
+        if let (Some(self_sha1), Some(other_sha1)) = (self.sha1.as_ref(), other.sha1.as_ref()) {
+            return self_sha1.eq(other_sha1);
         }
         // MD5 in case of emergency
-        match (self.md5.as_ref(), other.md5.as_ref()) {
-            (Some(self_md5), Some(other_md5)) => {
-                return self_md5.eq(other_md5);
-            },
-            _ => { }
+        if let (Some(self_md5), Some(other_md5)) = (self.md5.as_ref(), other.md5.as_ref()) {
+            return self_md5.eq(other_md5);
         }
         // uh-ooohh
-        match (self.crc.as_ref(), other.crc.as_ref()) {
-            (Some(self_crc), Some(other_crc)) => {
-                return self_crc.eq(other_crc);
-            },
-            _ => { }
+        if let (Some(self_crc), Some(other_crc)) = (self.crc.as_ref(), other.crc.as_ref()) {
+            return self_crc.eq(other_crc);
         }
         // last resource
-        match (self.size.as_ref(), other.size.as_ref()) {
-            (Some(self_size), Some(other_size)) => {
-                return self_size.eq(other_size);
-            },
-            _ => { }
+        if let (Some(self_size), Some(other_size)) = (self.size.as_ref(), other.size.as_ref()) {
+            return self_size.eq(other_size);
         }
 
         self.file_type.eq(&other.file_type)
@@ -214,32 +202,20 @@ impl PartialEq for DataFileInfo {
 impl Ord for DataFileInfo {
     fn cmp(&self, other: &Self) -> Ordering {
         // We are good just with the sha1
-        match  (self.sha1.as_ref(), other.sha1.as_ref()) {
-            (Some(self_sha1), Some(other_sha1)) => {
-                return self_sha1.cmp(&other_sha1);
-            },
-            _ => { }
+        if let (Some(self_sha1), Some(other_sha1)) = (self.sha1.as_ref(), other.sha1.as_ref()) {
+            return self_sha1.cmp(&other_sha1);
         }
         // MD5 in case of emergency
-        match  (self.md5.as_ref(), other.md5.as_ref()) {
-            (Some(self_md5), Some(other_md5)) => {
-                return self_md5.cmp(&other_md5);
-            },
-            _ => { }
+        if let (Some(self_md5), Some(other_md5)) = (self.md5.as_ref(), other.md5.as_ref()) {
+            return self_md5.cmp(&other_md5);
         }
         // uh-ooohh
-        match  (self.crc.as_ref(), other.crc.as_ref()) {
-            (Some(self_crc), Some(other_crc)) => {
-                return self_crc.cmp(&other_crc);
-            },
-            _ => { }
+        if let (Some(self_crc), Some(other_crc)) = (self.crc.as_ref(), other.crc.as_ref()) {
+            return self_crc.cmp(&other_crc);
         }
         // last resource
-        match  (self.size.as_ref(), other.size.as_ref()) {
-            (Some(self_size), Some(other_size)) => {
-                return self_size.cmp(&other_size);
-            },
-            _ => { }
+        if let (Some(self_size), Some(other_size)) = (self.size.as_ref(), other.size.as_ref()) {
+            return self_size.cmp(&other_size);
         }
 
         return self.file_type.cmp(&other.file_type);

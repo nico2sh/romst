@@ -1,5 +1,4 @@
 pub mod sqlite;
-pub mod sysout;
 
 use anyhow::Result;
 

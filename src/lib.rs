@@ -5,7 +5,7 @@ mod macros;
 pub mod sysout;
 
 use console::Style;
-use data::{importer::{DatImporter, DatImporterReporter}, models::{set::GameSet}, reader::{sqlite::DBReader, DataReader}, reader::{RomSearch, sqlite::DBReport}, reporter::{Reporter, report::Report}, writer::DataWriter, writer::sqlite::DBWriter};
+use data::{importer::{DatImporter, DatImporterReporter}, models::set::GameSet, reader::{DataReader, RomSearch, sqlite::{DBReader, DBReport}}, reporter::{Reporter, report::Report}, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
 use std::{path::Path, str::FromStr};

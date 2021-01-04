@@ -2,7 +2,7 @@ use clap::Clap;
 use console::Style;
 use env_logger::{Builder, Env, Target};
 use romst::{RomsetMode, Romst, sysout::DatImporterReporterSysOut};
-use std::{fs, path::Path};
+use std::path::Path;
 
 const DB_EXTENSION: &str = "rst";
 

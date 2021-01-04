@@ -74,22 +74,6 @@ pub struct SetReport {
     pub roms_missing: Vec<DataFile>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum SetNameReport {
-    Name(String),
-    RenameFromTo(String, String)
-}
-
-impl SetNameReport {
-    pub fn new(set_name: String, reference_name: String) -> Self {
-        if set_name.eq(&reference_name) {
-            SetNameReport::Name(set_name)
-        } else {
-            SetNameReport::RenameFromTo(set_name, reference_name)
-        }
-    }
-}
-
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FileRename {
     pub from: DataFile,

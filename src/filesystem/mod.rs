@@ -83,7 +83,7 @@ impl FileReader {
                     roms.push(rom);
                 }
             },
-            Err(ZipError::InvalidArchive(e)) => {
+            Err(ZipError::InvalidArchive(_e)) => {
                 let file_name = file_path.as_ref().to_path_buf().into_os_string().into_string().unwrap_or_else(|ref osstring| {
                     osstring.to_string_lossy().to_string()
                 });

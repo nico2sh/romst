@@ -1,4 +1,4 @@
-use std::{collections::HashMap, collections::HashSet, fmt::Display, iter::FromIterator};
+use std::{collections::HashSet, fmt::Display, iter::FromIterator};
 
 use anyhow::Result;
 use console::Style;

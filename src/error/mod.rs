@@ -29,9 +29,6 @@ pub enum RomstError {
     #[error("Unexpected End of File")]
     UnexpectedEOF,
 
-    #[error("Wrong argument")]
-    WrongArgument,
-
     #[error("ERROR: {message}")]
     GenericError {
         message: String

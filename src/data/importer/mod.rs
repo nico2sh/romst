@@ -333,8 +333,7 @@ fn process_attributes<F>(attributes: Attributes, mut f: F) where F: FnMut(&str, 
                 }
             },
             Err(e) => {
-                error!("Error reading attributes: {}", e);
-                ()
+                error!("Error reading attributes: {}", e)
             }
         }
     });
