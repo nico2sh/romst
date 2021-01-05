@@ -59,7 +59,7 @@ impl ReportReporterSysOut {
         let progress_bar =ProgressBar::new(!0);
         progress_bar.set_draw_target(ProgressDrawTarget::stdout());
         progress_bar.set_style(ProgressStyle::default_bar()
-            .template("{prefix}\n{spinner:.green} [{elapsed_precise}] [{bar:40.green/blue}] {bytes}/{total_bytes} ({eta}) | {msg}")
+            .template("{prefix}\n{spinner:.green} [{elapsed_precise}] [{bar:40.green/blue}] {pos}% ({eta}) | {msg}")
             .progress_chars("#>-"));
         progress_bar.set_prefix("P: Processed / D: Directories / I: Ignored");
         Self { progress_bar, total_files: !0, current_files: 0, new_files: 0, directories: 0, ignored: 0, current_file: String::new() }
