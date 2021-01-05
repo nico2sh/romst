@@ -1,7 +1,7 @@
 use clap::Clap;
 use console::Style;
 use env_logger::{Builder, Env, Target};
-use romst::{RomsetMode, Romst, sysout::DatImporterReporterSysOut};
+use romst::{RomsetMode, Romst, sysout::{DatImporterReporterSysOut, ReportReporterSysOut}};
 use std::path::Path;
 
 const DB_EXTENSION: &str = "rst";
@@ -152,7 +152,8 @@ fn main() {
             let db_file = check.db;
             let files = check.files;
             let set_mode = check.set_mode.unwrap_or_default();
-            match Romst::get_report(db_file, files, set_mode) {
+            let reporter = ReportReporterSysOut::new();
+            match Romst::get_report(db_file, files, set_mode, Some(reporter)) {
                 Ok(report) => {
                     println!("{}", report);
                 }

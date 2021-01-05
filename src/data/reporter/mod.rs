@@ -1,6 +1,6 @@
 pub mod report;
 
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, thread, time::Duration};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
 use self::report::{FileRename, FileReport, Report, SetReport};
 
@@ -12,10 +12,25 @@ use log::{error, warn};
 pub struct Reporter<R: DataReader> {
     data_reader: R,
     file_reader: FileReader,
+    reporter: Option<Box<dyn ReportReporter>>
+}
+
+pub trait ReportReporter {
+    fn set_total_files(&mut self, total_files: usize);
+    fn update_report_new_file(&mut self, new_file: &str);
+    fn update_report_new_added_file(&mut self, new_files: usize);
+    fn update_report_directory(&mut self, new_files: usize);
+    fn update_report_ignored(&mut self, new_files: usize);
+    fn update_report_file_error(&mut self, new_files: usize);
+    fn finish(&mut self);
 }
 
 impl<R: DataReader> Reporter<R> {
-    pub fn new(data_reader: R) -> Self { Self { data_reader, file_reader: FileReader::new() } }
+    pub fn new(data_reader: R) -> Self { Self { data_reader, file_reader: FileReader::new(), reporter: None } }
+
+    pub fn add_reporter<P>(&mut self, reporter: P) where P: ReportReporter + 'static {
+        self.reporter = Some(Box::new(reporter));
+    }
 
     pub fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
         if file_paths.len() == 1 {
@@ -48,7 +63,14 @@ impl<R: DataReader> Reporter<R> {
     }
 
     fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
+        if let Some(reporter) = self.reporter.as_mut() {
+            reporter.set_total_files(file_paths.len());
+        }
+
         let r: Vec<FileReport> = file_paths.into_iter().filter_map(|fp| {
+            if let Some(reporter) = self.reporter.as_mut() {
+                reporter.update_report_new_file(fp.as_ref().to_str().unwrap_or_default());
+            };
             let path = fp.as_ref();
             if path.is_file() {
                 match self.file_reader.get_game_set(&path, FileChecks::ALL) {
@@ -69,10 +91,16 @@ impl<R: DataReader> Reporter<R> {
                                 let mut file_report = FileReport::new(file_name);
                                 file_report.sets = sets_and_unknowns.0;
                                 file_report.unknown = sets_and_unknowns.1;
+                                if let Some(reporter) = self.reporter.as_mut() {
+                                    reporter.update_report_new_added_file(1);
+                                };
                                 Some(file_report)
                             }
                             Err(e) => { 
                                 error!("Error getting report for game set `{}`: {}", game_name, e);
+                                if let Some(reporter) = self.reporter.as_mut() {
+                                    reporter.update_report_file_error(1);
+                                };
                                 None
                             }
                         }
@@ -80,14 +108,23 @@ impl<R: DataReader> Reporter<R> {
                     Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
                         warn!("File `{}` is not a valid file", file_name);
                         // TODO: Unknown file, fix. FileReport type wrong?
+                        if let Some(reporter) = self.reporter.as_mut() {
+                            reporter.update_report_ignored(1);
+                        };
                         None
                     },
                     Err(e) => {
                         error!("ERROR: {}", e);
+                        if let Some(reporter) = self.reporter.as_mut() {
+                            reporter.update_report_file_error(1);
+                        };
                         None
                     }
                 }
             } else {
+                if let Some(reporter) = self.reporter.as_mut() {
+                    reporter.update_report_ignored(1);
+                };
                 None
             }
         }).collect();

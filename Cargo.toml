@@ -7,19 +7,19 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "0.4"
-env_logger = "0.8"
+log = "0.4.11"
+env_logger = "0.8.2"
 indicatif = "0.15.0"
-console = "0.13.0"
-anyhow = "1.0"
-thiserror = "1.0"
-bitflags = "1.2"
+console = "0.14.0"
+anyhow = "1.0.37"
+thiserror = "1.0.23"
+bitflags = "1.2.1"
 clap = "3.0.0-beta.2"
 quick-xml = "0.20.0"
-rusqlite = { version = "0.24.1", features = [ "bundled" ] }
-zip = "0.5"
-sha-1 = "0.9"
-md-5 = "0.9"
-rayon = "1.5"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+rusqlite = { version = "0.24.2", features = [ "bundled" ] }
+zip = "0.5.9"
+sha-1 = "0.9.2"
+md-5 = "0.9.1"
+rayon = "1.5.0"
+serde = { version = "1.0.118", features = ["derive"] }
+serde_json = "1.0.61"
