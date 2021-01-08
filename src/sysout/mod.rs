@@ -1,6 +1,4 @@
-use std::thread;
-
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 use crate::data::{importer::DatImporterReporter, reporter::ReportReporter};
 

@@ -1,6 +1,6 @@
 pub mod report;
 
-use std::{path::{Path, PathBuf}, thread, time::Duration};
+use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
 use self::report::{FileRename, FileReport, Report, SetReport};
 
