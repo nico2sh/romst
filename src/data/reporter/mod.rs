@@ -223,11 +223,14 @@ mod tests {
             } else {
                 false
             }
-        }).collect::<Vec<_>>().len() == 1;
-        if !assert_result {
-            println!("Test failed with asserting report:\n{}", report);
+        }).collect::<Vec<_>>().len();
+        if assert_result != 1{
+            println!("Test failed with asserting filename {}, found {} coincidences.\nReport:\n{}",
+                file_name,
+                assert_result,
+                report);
         }
-        assert!(assert_result);
+        assert_eq!(assert_result, 1);
     }
 
     #[test]
@@ -241,13 +244,13 @@ mod tests {
         let game_path = Path::new("testdata").join("split");
         let report = reporter.check(vec![ game_path ], RomsetMode::Merged)?;
 
-        tests::assert_file_report(&report, "device1", "device1", 1, 0, 0, 0);
-        tests::assert_file_report(&report, "game1", "game1", 4, 2, 0, 0);
-        tests::assert_file_report(&report, "game1a", "game1", 2, 4, 0, 0);
-        tests::assert_file_report(&report, "game2", "game2", 3, 0, 0, 0);
-        tests::assert_file_report(&report, "game3", "game3", 3, 0, 0, 0);
-        let report_sets = report.files;
-        assert!(report_sets.len() == 5);
+        let report_sets = &report.files;
+        assert_eq!(report_sets.len(), 5);
+        tests::assert_file_report(&report, "device1.zip", "device1", 1, 0, 0, 0);
+        tests::assert_file_report(&report, "game1.zip", "game1", 4, 2, 0, 0);
+        tests::assert_file_report(&report, "game1a.zip", "game1", 2, 4, 0, 0);
+        tests::assert_file_report(&report, "game2.zip", "game2", 3, 0, 0, 0);
+        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0);
 
         Ok(())
     }
@@ -263,11 +266,11 @@ mod tests {
         let game_path = Path::new("testdata").join("wrong");
         let report = reporter.check(vec![ &game_path ], RomsetMode::Split)?;
 
-        tests::assert_file_report(&report, "game1", "game1", 3, 1, 0, 0);
-        tests::assert_file_report(&report, "game2", "game2", 2, 0, 1, 0);
-        tests::assert_file_report(&report, "game3", "game3", 3, 0, 0, 1);
-        let report_sets = report.files;
-        assert!(report_sets.len() == 3);
+        let report_sets = &report.files;
+        assert_eq!(report_sets.len(), 3);
+        tests::assert_file_report(&report, "game1.zip", "game1", 3, 1, 0, 0);
+        tests::assert_file_report(&report, "game2.zip", "game2", 2, 0, 1, 0);
+        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 1);
 
         Ok(())
     }
