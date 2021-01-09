@@ -8,7 +8,6 @@ use super::{models::{file::DataFile, set::GameSet}, reader::DataReader};
 use anyhow::Result;
 use log::{error, warn};
 
-
 pub struct Reporter<R: DataReader> {
     data_reader: R,
     file_reader: FileReader,
@@ -32,20 +31,20 @@ impl<R: DataReader> Reporter<R> {
         self.reporter = Some(Box::new(reporter));
     }
 
-    pub fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
+    pub async fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
         if file_paths.len() == 1 {
             if let Some(path) = file_paths.get(0) {
                 let p = path.as_ref();
                 if p.is_dir() {
-                    return self.check_directory(&p.to_path_buf(), rom_mode)
+                    return self.check_directory(&p.to_path_buf(), rom_mode).await
                 }
             }
         }
 
-        self.check_files(file_paths, rom_mode)
+        self.check_files(file_paths, rom_mode).await
     }
 
-    pub fn check_directory(&mut self, file_path: &impl AsRef<Path>, rom_mode: RomsetMode) -> Result<Report> {
+    async fn check_directory(&mut self, file_path: &impl AsRef<Path>, rom_mode: RomsetMode) -> Result<Report> {
         let path = file_path.as_ref();
         if path.is_dir() {
             let contents = path.read_dir()?.into_iter().filter_map(|dir_entry| {
@@ -56,18 +55,19 @@ impl<R: DataReader> Reporter<R> {
                     None
                 }
             }).collect::<Vec<PathBuf>>();
-            self.check_files(contents, rom_mode)
+            self.check_files(contents, rom_mode).await
         } else {
             err!("Path is not a directory")
         }
     }
 
-    fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
+    async fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
         if let Some(reporter) = self.reporter.as_mut() {
             reporter.set_total_files(file_paths.len());
         }
 
-        let r: Vec<FileReport> = file_paths.into_iter().filter_map(|fp| {
+        let mut r = vec![];
+        for fp in &file_paths {
             if let Some(reporter) = self.reporter.as_mut() {
                 reporter.update_report_new_file(fp.as_ref().to_str().unwrap_or_default());
             };
@@ -76,7 +76,7 @@ impl<R: DataReader> Reporter<R> {
                 match self.file_reader.get_game_set(&path, FileChecks::ALL) {
                     Ok(game_set) => {
                         let game_name = game_set.game.name.clone();
-                        let sets_and_unknowns_result = self.on_set_found(game_set, rom_mode);
+                        let sets_and_unknowns_result = self.on_set_found(game_set, rom_mode).await;
                         match sets_and_unknowns_result {
                             Ok(sets_and_unknowns) => {
                                 let file_name = match path.file_name() {
@@ -94,14 +94,13 @@ impl<R: DataReader> Reporter<R> {
                                 if let Some(reporter) = self.reporter.as_mut() {
                                     reporter.update_report_new_added_file(1);
                                 };
-                                Some(file_report)
+                                r.push(file_report)
                             }
                             Err(e) => { 
                                 error!("Error getting report for game set `{}`: {}", game_name, e);
                                 if let Some(reporter) = self.reporter.as_mut() {
                                     reporter.update_report_file_error(1);
                                 };
-                                None
                             }
                         }
                     },
@@ -111,30 +110,27 @@ impl<R: DataReader> Reporter<R> {
                         if let Some(reporter) = self.reporter.as_mut() {
                             reporter.update_report_ignored(1);
                         };
-                        None
                     },
                     Err(e) => {
                         error!("ERROR: {}", e);
                         if let Some(reporter) = self.reporter.as_mut() {
                             reporter.update_report_file_error(1);
                         };
-                        None
                     }
                 }
             } else {
                 if let Some(reporter) = self.reporter.as_mut() {
                     reporter.update_report_ignored(1);
                 };
-                None
             }
-        }).collect();
+        }
 
         let report = Report::from_files(rom_mode, r);
 
         Ok(report)
     }
 
-    fn on_set_found(&mut self, game_set: GameSet, rom_mode: RomsetMode) -> Result<(Vec<SetReport>, Vec<String>)> {
+    async fn on_set_found(&mut self, game_set: GameSet, rom_mode: RomsetMode) -> Result<(Vec<SetReport>, Vec<String>)> {
         let mut set_reports = vec![];
         let mut unknowns= vec![];
 
@@ -144,7 +140,7 @@ impl<R: DataReader> Reporter<R> {
             let set_name = entry.0;
             let roms = entry.1;
 
-            let set_report = self.compare_roms_with_set(roms.into_iter().collect(), set_name, rom_mode)?;
+            let set_report = self.compare_roms_with_set(roms.into_iter().collect(), set_name, rom_mode).await?;
 
             set_reports.push(set_report);
         };
@@ -156,7 +152,7 @@ impl<R: DataReader> Reporter<R> {
         Ok((set_reports, unknowns))
     }
 
-    fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> {
+    async fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> {
         let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
 
         let mut report = SetReport::new(set_name.clone());
@@ -233,8 +229,8 @@ mod tests {
         assert_eq!(assert_result, 1);
     }
 
-    #[test]
-    fn get_right_data_from_file() -> Result<()> {
+    #[tokio::test]
+    async fn get_right_data_from_file() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
         let data_reader = DBReader::from_connection(&conn);
@@ -242,7 +238,7 @@ mod tests {
         let mut reporter = Reporter::new(data_reader);
 
         let game_path = Path::new("testdata").join("split");
-        let report = reporter.check(vec![ game_path ], RomsetMode::Merged)?;
+        let report = reporter.check(vec![ game_path ], RomsetMode::Merged).await?;
 
         let report_sets = &report.files;
         assert_eq!(report_sets.len(), 5);
@@ -255,8 +251,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn get_wrong_data_from_file() -> Result<()> {
+    #[tokio::test]
+    async fn get_wrong_data_from_file() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
         let data_reader = DBReader::from_connection(&conn);
@@ -264,7 +260,7 @@ mod tests {
         let mut reporter = Reporter::new(data_reader);
 
         let game_path = Path::new("testdata").join("wrong");
-        let report = reporter.check(vec![ &game_path ], RomsetMode::Split)?;
+        let report = reporter.check(vec![ &game_path ], RomsetMode::Split).await?;
 
         let report_sets = &report.files;
         assert_eq!(report_sets.len(), 3);

@@ -138,6 +138,13 @@ impl Romst {
             report.add_reporter(reporter);
         }
 
-        report.check(file_paths, rom_mode)
+        let report = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async { 
+                report.check(file_paths, rom_mode).await
+             });
+        report
     }
 }
