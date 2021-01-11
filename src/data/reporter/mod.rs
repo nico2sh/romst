@@ -121,7 +121,9 @@ impl<R: DataReader> Reporter<R> {
                             }
                         };
 
-                        result
+                        if let Err(error) = result {
+                            error!("ERROR: {}", error);
+                        }
                     });
                     Some(task)
                 } else {
@@ -135,10 +137,14 @@ impl<R: DataReader> Reporter<R> {
         let sender = tx.clone();
         tokio::spawn(async move {
             for task in tasks {
-                let _ = task.await;
+                if let Err(error) = task.await {
+                    error!("ERROR: {}", error);
+                }
             }
-            let _ = sender.send(ReportMessage::new("".to_string(), 
-            ReportMessageContent::Done)).await;
+            if let Err(error) = sender.send(ReportMessage::new("".to_string(), 
+            ReportMessageContent::Done)).await {
+                error!("ERROR: {}", error);
+            }
         });
 
         let mut r = vec![];
