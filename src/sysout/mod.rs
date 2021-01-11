@@ -55,7 +55,6 @@ pub struct ReportReporterSysOut {
 impl ReportReporterSysOut {
     pub fn new() -> Self {
         let progress_bar =ProgressBar::new(!0);
-        progress_bar.set_draw_target(ProgressDrawTarget::stdout());
         progress_bar.set_style(ProgressStyle::default_bar()
             .template("{prefix}\n{spinner:.green} [{elapsed_precise}] [{bar:40.green/blue}] {pos}% ({eta}) | {msg}")
             .progress_chars("#>-"));
