@@ -128,12 +128,11 @@ impl<R: DataReader> Reporter<R> {
                     Some(task)
                 } else {
                     if let Some(reporter) = self.reporter.as_mut() {
-                        reporter.update_report_ignored(1);
+                        reporter.update_report_directory(1);
                     };
                     None
                 }
             }).collect::<Vec<_>>();
-
         let sender = tx.clone();
         tokio::spawn(async move {
             for task in tasks {
@@ -150,9 +149,11 @@ impl<R: DataReader> Reporter<R> {
         let mut r = vec![];
         while let Some(message) = rx.recv().await {
             let file_name = message.file_name;
-            if let Some(reporter) = self.reporter.as_mut() {
-                reporter.update_report_new_file(file_name.as_str());
-            };
+            if !file_name.eq("") {
+                if let Some(reporter) = self.reporter.as_mut() {
+                    reporter.update_report_new_file(file_name.as_str());
+                };
+            }
             match message.content {
                 ReportMessageContent::FoundGameSet(game_set) => {
                     if let Some(file_report) = self.build_file_report(file_name, game_set, rom_mode).await {
@@ -183,6 +184,10 @@ impl<R: DataReader> Reporter<R> {
         };
 
         let report = Report::from_files(rom_mode, r);
+
+        if let Some(reporter) = self.reporter.as_mut() {
+            reporter.finish();
+        }
         Ok(report)
     }
 
@@ -262,7 +267,7 @@ impl<R: DataReader> Reporter<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{cell::RefCell, path::Path, rc::Rc};
     use rusqlite::{Connection, OpenFlags};
     use crate::data::{importer::DatImporter, reader::sqlite::DBReader, writer::sqlite::DBWriter};
     use super::*;
@@ -277,6 +282,60 @@ mod tests {
         }
 
         Ok(conn)
+    }
+
+    struct TestReportReporter {
+        inner: Rc<RefCell<InnerReportReporter>>
+    }
+
+    struct InnerReportReporter {
+        total_files: usize,
+        current_files: usize,
+        new_files: usize,
+        directories: usize,
+        ignored: usize,
+        error: usize,
+        finished: bool,
+        files: Vec<String>
+    }
+
+    impl TestReportReporter {
+        fn new() -> Self { Self { 
+            inner: Rc::new(RefCell::new(InnerReportReporter {
+                total_files: 0, current_files: 0, new_files: 0, directories: 0, ignored: 0, error: 0, finished: false, files: vec![] }
+             )) }
+        }
+    }
+
+    impl ReportReporter for TestReportReporter {
+        fn set_total_files(&mut self, total_files: usize) {
+            self.inner.borrow_mut().total_files += total_files;
+        }
+
+        fn update_report_new_file(&mut self, new_file: &str) {
+            self.inner.borrow_mut().current_files += 1;
+            self.inner.borrow_mut().files.push(new_file.to_string());
+        }
+
+        fn update_report_new_added_file(&mut self, new_files: usize) {
+            self.inner.borrow_mut().new_files += new_files;
+        }
+
+        fn update_report_directory(&mut self, new_files: usize) {
+            self.inner.borrow_mut().directories += new_files;
+        }
+
+        fn update_report_ignored(&mut self, new_files: usize) {
+            self.inner.borrow_mut().ignored += new_files;
+        }
+
+        fn update_report_file_error(&mut self, new_files: usize) {
+            self.inner.borrow_mut().error += new_files;
+        }
+
+        fn finish(&mut self) {
+            self.inner.borrow_mut().finished = true;
+        }
     }
 
     fn assert_file_report(report: &Report, file_name: &str, report_name: &str, roms_have: usize, roms_missing: usize, roms_to_rename: usize, roms_unneeded: usize) {
@@ -310,10 +369,21 @@ mod tests {
         let data_reader = DBReader::from_connection(&conn);
 
         let mut reporter = Reporter::new(data_reader);
+        let report_reporter = TestReportReporter::new();
+        let inner = Rc::clone(&report_reporter.inner);
+
+        reporter.add_reporter(report_reporter);
 
         let game_path = Path::new("testdata").join("split");
         let report = reporter.check(vec![ game_path ], RomsetMode::Merged).await?;
 
+        assert_eq!(inner.borrow().total_files, 5);
+        assert_eq!(inner.borrow().current_files, 5);
+        assert_eq!(inner.borrow().new_files, 5);
+        assert_eq!(inner.borrow().directories, 0);
+        assert_eq!(inner.borrow().ignored, 0);
+        assert_eq!(inner.borrow().error, 0);
+        assert!(inner.borrow().finished);
         let report_sets = &report.files;
         assert_eq!(report_sets.len(), 5);
         tests::assert_file_report(&report, "device1.zip", "device1", 1, 0, 0, 0);
@@ -332,10 +402,21 @@ mod tests {
         let data_reader = DBReader::from_connection(&conn);
 
         let mut reporter = Reporter::new(data_reader);
+        let report_reporter = TestReportReporter::new();
+        let inner = Rc::clone(&report_reporter.inner);
+
+        reporter.add_reporter(report_reporter);
 
         let game_path = Path::new("testdata").join("wrong");
         let report = reporter.check(vec![ &game_path ], RomsetMode::Split).await?;
 
+        assert_eq!(inner.borrow().total_files, 4);
+        assert_eq!(inner.borrow().current_files, 4);
+        assert_eq!(inner.borrow().new_files, 3);
+        assert_eq!(inner.borrow().directories, 0);
+        assert_eq!(inner.borrow().ignored, 1);
+        assert_eq!(inner.borrow().error, 0);
+        assert!(inner.borrow().finished);
         let report_sets = &report.files;
         assert_eq!(report_sets.len(), 3);
         tests::assert_file_report(&report, "game1.zip", "game1", 3, 1, 0, 0);
