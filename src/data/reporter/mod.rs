@@ -109,8 +109,6 @@ impl<R: DataReader> Reporter<R> {
                                     ReportMessageContent::FoundGameSet(game_set))).await
                             },
                             Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
-                                warn!("File `{}` is not a valid file", file_name);
-                                // TODO: Unknown file, fix. FileReport type wrong?
                                 sender.send(ReportMessage::new(file_name,
                                     ReportMessageContent::FoundNotValid)).await
                             },
@@ -168,6 +166,8 @@ impl<R: DataReader> Reporter<R> {
                     }
                 }
                 ReportMessageContent::FoundNotValid => {
+                    warn!("File `{}` is not a valid file", file_name);
+                    // TODO: Unknown file, fix. FileReport type wrong?
                     if let Some(reporter) = self.reporter.as_mut() {
                         reporter.update_report_ignored(1);
                     };
