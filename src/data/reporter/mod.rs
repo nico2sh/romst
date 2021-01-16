@@ -6,6 +6,8 @@ use self::report::{FileRename, FileReport, Report, SetReport};
 
 use super::{models::{file::DataFile, set::GameSet}, reader::DataReader};
 use anyhow::Result;
+use tokio_stream::StreamExt;
+use tokio::sync::mpsc::{Receiver, channel};
 use log::{error, warn};
 
 type RR = Option<Box<dyn ReportReporter>>;
@@ -79,12 +81,12 @@ impl<R: DataReader> Reporter<R> {
         }
     }
 
-    async fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
+    async fn send_sets_from_files(&mut self, file_paths: Vec<impl AsRef<Path>>) -> Result<Receiver<ReportMessage>> {
         if let Some(reporter) = self.reporter.as_mut() {
             reporter.set_total_files(file_paths.len());
         }
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<ReportMessage>(32);
+        let (tx, receiver) = channel::<ReportMessage>(file_paths.len());
 
         let tasks = file_paths.into_iter()
             .filter_map(|fp| {
@@ -92,6 +94,7 @@ impl<R: DataReader> Reporter<R> {
                 if path.is_file() {
                     let sender = tx.clone();
                     let p = path.to_path_buf();
+
                     let task = tokio::spawn(async move {
                         let file_name = match p.file_name() {
                             Some(file) => {
@@ -123,6 +126,7 @@ impl<R: DataReader> Reporter<R> {
                             error!("ERROR: {}", error);
                         }
                     });
+
                     Some(task)
                 } else {
                     if let Some(reporter) = self.reporter.as_mut() {
@@ -143,6 +147,12 @@ impl<R: DataReader> Reporter<R> {
                 error!("ERROR: {}", error);
             }
         });
+
+        Ok(receiver)
+    }
+
+    async fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
+        let mut rx = self.send_sets_from_files(file_paths).await?;
 
         let mut r = vec![];
         while let Some(message) = rx.recv().await {
