@@ -1,7 +1,7 @@
 use std::fmt::{self, Display};
 use console::Style;
 use serde::{Deserialize, Serialize};
-use crate::{data::models::file::DataFile, RomsetMode};
+use crate::{RomsetMode, data::models::file::DataFile};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Report {
@@ -33,21 +33,38 @@ impl Display for Report {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileReport {
+    pub rom_mode: RomsetMode,
     pub file_name: String,
     pub sets: Vec<SetReport>,
     pub unknown: Vec<String>
 }
 
 impl FileReport {
-    pub fn new<S>(file_name: S) -> Self where S: Into<String> { Self { file_name: file_name.into(), sets: vec![], unknown: vec![] } }
+    pub fn new<S>(file_name: S, rom_mode: RomsetMode) -> Self where S: Into<String> {
+        Self { file_name: file_name.into(), rom_mode, sets: vec![], unknown: vec![] }
+    }
     pub fn add_set(&mut self, set: SetReport) {
         self.sets.push(set);
     }
     pub fn add_unknown(&mut self, unknown: String) {
         self.unknown.push(unknown);
     }
+    pub fn get_full_sets(&mut self) -> Vec<&SetReport> {
+        self.sets.iter().filter(|set| {
+            set.roms_missing.len() == 0 && set.roms_to_rename.len() == 0
+        }).collect::<Vec<_>>()
+    }
+    pub fn get_fixeable_sets(&mut self) -> Vec<&SetReport> {
+        self.sets.iter().filter(|set| {
+            set.roms_missing.len() == 0 && set.roms_to_rename.len() > 0
+        }).collect::<Vec<_>>()
+    }
+    pub fn get_uncomplete_sets(&mut self) -> Vec<&SetReport> {
+        self.sets.iter().filter(|set| {
+            set.roms_missing.len() > 0
+        }).collect::<Vec<_>>()
+    }
 }
-
 
 impl Display for FileReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -106,7 +123,6 @@ impl SetReport {
         self.roms_missing.push(rom);
     }
 }
-
 
 impl Display for SetReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

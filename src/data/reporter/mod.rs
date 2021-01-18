@@ -1,11 +1,12 @@
 pub mod report;
 
-use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}};
+use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
 use self::report::{FileRename, FileReport, Report, SetReport};
 
 use super::{models::{file::DataFile, set::GameSet}, reader::DataReader};
 use anyhow::Result;
+use crossbeam::sync::WaitGroup;
 use tokio_stream::StreamExt;
 use tokio::sync::mpsc::{Receiver, channel};
 use log::{error, warn};
@@ -81,21 +82,24 @@ impl<R: DataReader> Reporter<R> {
         }
     }
 
+    /// Returns a Receiver that will receive a message with the file reports.
     async fn send_sets_from_files(&mut self, file_paths: Vec<impl AsRef<Path>>) -> Result<Receiver<ReportMessage>> {
         if let Some(reporter) = self.reporter.as_mut() {
             reporter.set_total_files(file_paths.len());
         }
 
         let (tx, receiver) = channel::<ReportMessage>(file_paths.len());
+        let wg = WaitGroup::new();
 
-        let tasks = file_paths.into_iter()
-            .filter_map(|fp| {
+        file_paths.into_iter()
+            .for_each(|fp| {
                 let path = fp.as_ref();
                 if path.is_file() {
                     let sender = tx.clone();
                     let p = path.to_path_buf();
+                    let wg = wg.clone();
 
-                    let task = tokio::spawn(async move {
+                    tokio::spawn(async move {
                         let file_name = match p.file_name() {
                             Some(file) => {
                                 file.to_owned().into_string().unwrap_or_else(|os_string| {
@@ -125,23 +129,18 @@ impl<R: DataReader> Reporter<R> {
                         if let Err(error) = result {
                             error!("ERROR: {}", error);
                         }
-                    });
 
-                    Some(task)
+                        drop(wg);
+                    });
                 } else {
                     if let Some(reporter) = self.reporter.as_mut() {
                         reporter.update_report_directory(1);
                     };
-                    None
                 }
-            }).collect::<Vec<_>>();
+            });
         let sender = tx.clone();
         tokio::spawn(async move {
-            for task in tasks {
-                if let Err(error) = task.await {
-                    error!("ERROR: {}", error);
-                }
-            }
+            wg.wait();
             if let Err(error) = sender.send(ReportMessage::new("".to_string(), 
             ReportMessageContent::Done)).await {
                 error!("ERROR: {}", error);
@@ -176,7 +175,7 @@ impl<R: DataReader> Reporter<R> {
                     }
                 }
                 ReportMessageContent::FoundNotValid => {
-                    warn!("File `{}` is not a valid file", file_name);
+                    // warn!("File `{}` is not a valid file", file_name);
                     // TODO: Unknown file, fix. FileReport type wrong?
                     if let Some(reporter) = self.reporter.as_mut() {
                         reporter.update_report_ignored(1);
@@ -207,7 +206,7 @@ impl<R: DataReader> Reporter<R> {
 
         match sets_and_unknowns_result {
             Ok(sets_and_unknowns) => {
-                let mut file_report = FileReport::new(file_name);
+                let mut file_report = FileReport::new(file_name, rom_mode);
                 file_report.sets = sets_and_unknowns.0;
                 file_report.unknown = sets_and_unknowns.1;
                 Some(file_report)
