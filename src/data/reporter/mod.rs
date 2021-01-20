@@ -44,7 +44,6 @@ impl ReportMessage {
     fn new(file_name: String, content: ReportMessageContent) -> Self { Self { file_name, content } }
 }
 
-
 impl<R: DataReader> Reporter<R> {
     pub fn new(data_reader: R) -> Self { Self { data_reader, reporter: None } }
 
@@ -218,7 +217,7 @@ impl<R: DataReader> Reporter<R> {
         }
     }
 
-    fn on_set_found(&mut self, game_set: GameSet, rom_mode: RomsetMode) -> Result<(Vec<SetReport>, Vec<String>)> {
+    fn on_set_found(&mut self, game_set: GameSet, rom_mode: RomsetMode) -> Result<(Vec<SetReport>, Vec<DataFile>)> {
         let mut set_reports = vec![];
         let mut unknowns= vec![];
 
@@ -234,7 +233,7 @@ impl<R: DataReader> Reporter<R> {
         };
 
         for unknown in rom_usage_result.unknowns {
-            unknowns.push(unknown.name);
+            unknowns.push(unknown);
         }
 
         Ok((set_reports, unknowns))

@@ -36,7 +36,7 @@ pub struct FileReport {
     pub rom_mode: RomsetMode,
     pub file_name: String,
     pub sets: Vec<SetReport>,
-    pub unknown: Vec<String>
+    pub unknown: Vec<DataFile>
 }
 
 impl FileReport {
@@ -46,7 +46,7 @@ impl FileReport {
     pub fn add_set(&mut self, set: SetReport) {
         self.sets.push(set);
     }
-    pub fn add_unknown(&mut self, unknown: String) {
+    pub fn add_unknown(&mut self, unknown: DataFile) {
         self.unknown.push(unknown);
     }
     pub fn get_full_sets(&mut self) -> Vec<&SetReport> {
