@@ -49,23 +49,23 @@ pub struct ReportReporterSysOut {
     new_files: usize,
     directories: usize,
     ignored: usize,
+    error: usize,
     current_file: String,
 }
 
 impl ReportReporterSysOut {
     pub fn new() -> Self {
         let progress_bar =ProgressBar::new(!0);
-        progress_bar.set_draw_target(ProgressDrawTarget::stdout());
         progress_bar.set_style(ProgressStyle::default_bar()
             .template("{prefix}\n{spinner:.green} [{elapsed_precise}] [{bar:40.green/blue}] {pos}% ({eta}) | {msg}")
             .progress_chars("#>-"));
         progress_bar.set_prefix("P: Processed / D: Directories / I: Ignored");
-        Self { progress_bar, total_files: !0, current_files: 0, new_files: 0, directories: 0, ignored: 0, current_file: String::new() }
+        Self { progress_bar, total_files: !0, current_files: 0, new_files: 0, directories: 0, ignored: 0, error: 0, current_file: String::new() }
     }
 
     fn update_info_numbers(&mut self) {
         self.progress_bar.set_prefix(&format!("P: Processed / D: Directories / I: Ignored | {}", self.current_file));
-        self.progress_bar.set_message(&format!("P: {} / D: {} / I: {}", self.new_files, self.directories, self.ignored));
+        self.progress_bar.set_message(&format!("P: {} / D: {} / I: {} / E: {}", self.new_files, self.directories, self.ignored, self.error));
     }
 }
 
@@ -93,17 +93,17 @@ impl ReportReporter for ReportReporterSysOut {
     }
 
     fn update_report_ignored(&mut self, new_files: usize) {
-        self.directories += new_files;
-        self.update_info_numbers();
-    }
-
-    fn update_report_file_error(&mut self, new_files: usize) {
         self.ignored += new_files;
         self.update_info_numbers();
     }
 
+    fn update_report_file_error(&mut self, new_files: usize) {
+        self.error += new_files;
+        self.update_info_numbers();
+    }
+
     fn finish(&mut self) {
-        self.progress_bar.set_prefix("P: Processed / D: Directories / I: Ignored | FINISHED");
-        self.progress_bar.finish_with_message(&format!("P: {} / D: {} / I: {}", self.new_files, self.directories, self.ignored));
+        self.progress_bar.set_prefix("P: Processed / D: Directories / I: Ignored / E: Errors | FINISHED");
+        self.progress_bar.finish_with_message(&format!("P: {} / D: {} / I: {} / E: {}", self.new_files, self.directories, self.ignored, self.error));
     }
 }
