@@ -66,7 +66,14 @@ impl FileReader {
                     let sha1 =  if use_sha1 { Some(self.sha1_hasher.get_hash(&writer)) } else { None };
                     let md5 =  if use_md5 { Some(self.md5_hasher.get_hash(&writer)) } else { None };
                     let size = if use_size { Some(f.size() as u32) } else { None };
-                    let crc = if use_crc { Some(format!("{:x}", f.crc32())) } else { None };
+                    let crc = if use_crc { 
+                        let mut crc32 = format!("{:x}", f.crc32());
+                        if crc32.len() % 2 == 1 {
+                            // we append a zero for odd digits
+                            crc32 = format!("0{}", crc32);
+                        }
+                        Some(crc32)
+                    } else { None };
 
                     let rom = DataFile {
                         name: f.name().to_string(),
