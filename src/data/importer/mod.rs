@@ -361,7 +361,7 @@ fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<D
             "name" => file_name = Some(value.to_string()),
             "sha1" => data_file_info.sha1 = Some(String::from(value)),
             "md5" => data_file_info.md5 = Some(String::from(value)),
-            "crc" => data_file_info.crc = Some(String::from(value)),
+            "crc" => data_file_info.crc = Some(String::from(value).to_lowercase()),
             "size" => data_file_info.size = value.parse::<u32>().ok(),
             "serial" => debug!("Ignoring serial attribute from file"),
             "status" => status = Some(String::from(value)),
