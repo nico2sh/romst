@@ -25,7 +25,6 @@ impl IdsCounter {
 #[derive(Debug)]
 pub struct DBWriter<'d> {
     conn: &'d mut Connection,
-    ids: IdsCounter,
     buffer: Buffer,
     buffer_size: u16,
 }
@@ -136,7 +135,7 @@ impl Buffer {
 
 impl <'d> DBWriter<'d> {
     pub fn from_connection(conn: &'d mut Connection, buffer_size: u16) -> Self {
-        Self { conn, ids: IdsCounter::new(), buffer: Buffer::new(), buffer_size }
+        Self { conn, buffer: Buffer::new(), buffer_size }
     }
 
     fn remove_table_if_exist(&self, table_name: &str) -> Result<()> {
