@@ -7,7 +7,6 @@ use self::report::{FileRename, FileReport, Report, SetReport};
 use super::{models::{file::DataFile, set::GameSet}, reader::{self, DataReader}};
 use anyhow::Result;
 use crossbeam::sync::WaitGroup;
-use tokio_stream::StreamExt;
 use tokio::sync::mpsc::{Receiver, channel};
 use log::{error, warn};
 
@@ -90,17 +89,7 @@ impl<R: DataReader> Reporter<R> {
         let (tx, receiver) = channel::<ReportMessage>(file_paths.len());
         let wg = WaitGroup::new();
 
-        let file_checks = self.data_reader.get_file_checks()?;
-        let mut use_checks = FileChecks::ALL;
-        if file_checks.sha1 == 0 {
-            use_checks = use_checks & !FileChecks::SHA1;
-        }
-        if file_checks.md5 == 0 {
-            use_checks = use_checks & !FileChecks::MD5;
-        }
-        if file_checks.crc == 0 {
-            use_checks = use_checks & !FileChecks::CRC;
-        }
+        let file_checks = self.data_reader.get_file_checks()?.get_file_checks();
 
         file_paths.into_iter()
             .for_each(|fp| {
@@ -121,7 +110,7 @@ impl<R: DataReader> Reporter<R> {
                         };
 
                         let mut file_reader = FileReader::new();
-                        let result = match file_reader.get_game_set(&p, use_checks) {
+                        let result = match file_reader.get_game_set(&p, file_checks) {
                             Ok(game_set) => {
                                 sender.send(ReportMessage::new(file_name,
                                     ReportMessageContent::FoundGameSet(game_set))).await
