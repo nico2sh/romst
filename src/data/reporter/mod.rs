@@ -4,10 +4,9 @@ use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
 use self::report::{FileRename, FileReport, Report, SetReport};
 
-use super::{models::{file::DataFile, set::GameSet}, reader::DataReader};
+use super::{models::{file::DataFile, set::GameSet}, reader::{self, DataReader}};
 use anyhow::Result;
 use crossbeam::sync::WaitGroup;
-use tokio_stream::StreamExt;
 use tokio::sync::mpsc::{Receiver, channel};
 use log::{error, warn};
 
@@ -90,6 +89,8 @@ impl<R: DataReader> Reporter<R> {
         let (tx, receiver) = channel::<ReportMessage>(file_paths.len());
         let wg = WaitGroup::new();
 
+        let file_checks = self.data_reader.get_file_checks()?.get_file_checks();
+
         file_paths.into_iter()
             .for_each(|fp| {
                 let path = fp.as_ref();
@@ -109,7 +110,7 @@ impl<R: DataReader> Reporter<R> {
                         };
 
                         let mut file_reader = FileReader::new();
-                        let result = match file_reader.get_game_set(&p, FileChecks::ALL) {
+                        let result = match file_reader.get_game_set(&p, file_checks) {
                             Ok(game_set) => {
                                 sender.send(ReportMessage::new(file_name,
                                     ReportMessageContent::FoundGameSet(game_set))).await

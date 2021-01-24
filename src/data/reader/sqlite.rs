@@ -7,7 +7,7 @@ use rusqlite::{Connection, ToSql, params};
 
 use crate::{RomsetMode, data::models::{file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
 
-use super::{DataReader, RomSearch};
+use super::{DataReader, FileCheckSearch, RomSearch};
 
 #[derive(Debug)]
 pub struct SearchRomIds {
@@ -368,6 +368,19 @@ impl <'d> DataReader for DBReader<'d> {
         })?.filter_map(|row| row.ok());
 
         Ok(result.collect())
+    }
+
+    fn get_file_checks(&self) -> Result<FileCheckSearch> {
+        let mut stmt = self.conn.prepare("SELECT count(sha1), count(md5), count(crc) FROM roms;")?;
+        let result = stmt.query_row(params![], |row| {
+            Ok(FileCheckSearch {
+                sha1: row.get(0)?,
+                md5: row.get(1)?,
+                crc: row.get(2)?,
+            })
+        })?;
+
+        Ok(result)
     }
 }
 
