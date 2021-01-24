@@ -50,6 +50,12 @@ impl RomSearch {
     }
 }
 
+pub struct FileCheckSearch {
+    pub sha1: u32,
+    pub md5: u32,
+    pub crc: u32
+}
+
 pub trait DataReader {
     fn get_game<S>(&self, game_name: S) -> Option<Game> where S: AsRef<str> + rusqlite::ToSql;
     fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DataFile>> where S: AsRef<str> + rusqlite::ToSql;
@@ -72,4 +78,6 @@ pub trait DataReader {
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch>;
 
     fn get_devices_for_game<S>(&self, game_name: S) -> Result<Vec<String>> where S: AsRef<str> + rusqlite::ToSql;
+
+    fn get_file_checks(&self) -> Result<FileCheckSearch>;
 }
