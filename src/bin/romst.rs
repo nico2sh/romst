@@ -17,7 +17,7 @@ struct Opts {
 enum SubCommand {
     #[clap(about = "Import a DAT file into the database")]
     Import(ImportDat),
-    #[clap(about = "Prints information from a romset")]
+    #[clap(about = "Gets information from the database for Romsets")]
     SetInfo(SetInfo),
     #[clap(about = "Shows which sets a Rom is used")]
     RomUsage(RomUsage),
