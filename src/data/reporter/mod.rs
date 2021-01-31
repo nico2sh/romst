@@ -1,10 +1,11 @@
-pub mod report;
+pub mod file_report;
+pub mod scan_report;
 
 use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
-use self::report::{FileRename, FileReport, Report, SetReport};
+use self::file_report::{FileRename, FileReport, Report, SetReport};
 
-use super::{models::{file::DataFile, set::GameSet}, reader::{self, DataReader}};
+use super::{models::{file::DataFile, set::GameSet}, reader::DataReader};
 use anyhow::Result;
 use crossbeam::sync::WaitGroup;
 use tokio::sync::mpsc::{Receiver, channel};
