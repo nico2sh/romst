@@ -49,17 +49,17 @@ impl FileReport {
     pub fn add_unknown(&mut self, unknown: DataFile) {
         self.unknown.push(unknown);
     }
-    pub fn get_full_sets(&mut self) -> Vec<&SetReport> {
+    pub fn get_full_sets(&self) -> Vec<&SetReport> {
         self.sets.iter().filter(|set| {
             set.roms_missing.len() == 0 && set.roms_to_rename.len() == 0
         }).collect::<Vec<_>>()
     }
-    pub fn get_fixeable_sets(&mut self) -> Vec<&SetReport> {
+    pub fn get_fixeable_sets(&self) -> Vec<&SetReport> {
         self.sets.iter().filter(|set| {
             set.roms_missing.len() == 0 && set.roms_to_rename.len() > 0
         }).collect::<Vec<_>>()
     }
-    pub fn get_uncomplete_sets(&mut self) -> Vec<&SetReport> {
+    pub fn get_uncomplete_sets(&self) -> Vec<&SetReport> {
         self.sets.iter().filter(|set| {
             set.roms_missing.len() > 0
         }).collect::<Vec<_>>()
