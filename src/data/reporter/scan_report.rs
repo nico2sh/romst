@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::data::models::file::DataFile;
+use crate::data::models::{self, file::DataFile};
 
 use super::file_report::FileReport;
 
@@ -26,6 +26,7 @@ pub struct Set {
     pub roms_missing: Vec<DataFile>,
 }
 
+#[derive(Debug, PartialEq)]
 enum SetStatus {
     COMPLETE,
     FIXEABLE,
@@ -33,7 +34,7 @@ enum SetStatus {
 }
 
 impl Set {
-    pub fn new<S>(name: S) -> Self where S: Into<String> {
+    fn new<S>(name: S) -> Self where S: Into<String> {
         Self {
             name: name.into(),
             roms_available: vec![],
@@ -44,6 +45,7 @@ impl Set {
         if self.roms_missing.len() == 0 {
             let available = self.roms_available.len();
             let mut files_count = HashMap::new();
+
             for set_rom in &self.roms_available {
                 for location in &set_rom.location {
                     let number = files_count.entry(&location.file).or_insert(0);
@@ -52,22 +54,33 @@ impl Set {
                     }
                 }
             }
-            if let Some(count) = files_count.get(&self.name) {
-                if count.eq(&available) {
-                    SetStatus::COMPLETE
-                } else {
-                    SetStatus::FIXEABLE
+
+            for entry in files_count {
+                if entry.1.eq(&available) {
+                    let file_name = entry.0;
+                    if models::does_file_belong_to_set(file_name, &self.name) {
+                        return SetStatus::COMPLETE;
+                    }
                 }
-            } else {
-                SetStatus::FIXEABLE
             }
+
+            return SetStatus::FIXEABLE;
         } else {
             SetStatus::INCOMPLETE
         }
     }
 
-    pub fn add_set_rom(&self, location: RomLocation, file: DataFile) {
-        self.roms_available.push(SetRom::new());
+    pub fn add_set_rom(&mut self, location: RomLocation, file: DataFile) {
+        match self.roms_available.iter().position(|d| {
+            d.file.eq(&file)
+        }) {
+            Some(index) => {
+                self.roms_available[index].location.push(location);
+            }
+            None => {
+                self.roms_available.push(SetRom::new(location, file));
+            }
+        };
     }
 }
 
@@ -77,7 +90,7 @@ pub struct SetRom {
 }
 
 impl SetRom {
-    pub fn new(location: Vec<RomLocation>, file: DataFile) -> Self { Self { location, file } }
+    pub fn new(location: RomLocation, file: DataFile) -> Self { Self { location: vec![location], file } }
 }
 
 
@@ -87,7 +100,7 @@ pub struct RomLocation {
 }
 
 impl RomLocation {
-    pub fn new(file: String, with_name: String) -> Self { Self { file, with_name } }
+    pub fn new<S>(file: S, with_name: S) -> Self where S: Into<String> { Self { file: file.into(), with_name: with_name.into() } }
 }
 
 
@@ -99,10 +112,17 @@ mod tests {
 
     #[test]
     fn has_complete_set() {
-        let set = Set::new("test");
-        set.roms_available.push("file1", DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
-        let file1 = DataFile::new("file1", DataFileInfo::new(FileType::Rom));
-        let file1 = DataFile::new("file2", DataFileInfo::new(FileType::Rom));
-        let file1 = DataFile::new("file3", DataFileInfo::new(FileType::Rom));
+        let mut set = Set::new("set1");
+        set.add_set_rom(RomLocation::new("set1.zip", "file1"),
+            DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
+
+        set.add_set_rom(RomLocation::new("set1.zip", "file2"),
+            DataFile::new("file2", DataFileInfo::new(FileType::Rom)));
+
+        set.add_set_rom(RomLocation::new("set1.zip", "file3"),
+            DataFile::new("file3", DataFileInfo::new(FileType::Rom)));
+
+        let completeness = set.is_complete();
+        assert_eq!(SetStatus::COMPLETE, completeness);
     }
 }
