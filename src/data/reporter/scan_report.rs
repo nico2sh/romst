@@ -66,13 +66,20 @@ impl Set {
         }
     }
 
-    pub fn add_set_rom(location: String, )
+    pub fn add_set_rom(&self, location: RomLocation, file: DataFile) {
+        self.roms_available.push(SetRom::new());
+    }
 }
 
 pub struct SetRom {
     pub location: Vec<RomLocation>,
     pub file: DataFile,
 }
+
+impl SetRom {
+    pub fn new(location: Vec<RomLocation>, file: DataFile) -> Self { Self { location, file } }
+}
+
 
 pub struct RomLocation {
     file: String,
