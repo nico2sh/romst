@@ -164,7 +164,7 @@ impl<R: DataReader> Reporter<R> {
             }
             match message.content {
                 ReportMessageContent::FoundGameSet(game_set) => {
-                    if let Some(file_report) = self.build_file_report(file_name, game_set, rom_mode).await {
+                    if let Ok(file_report) = self.build_file_report(file_name, game_set, rom_mode).await {
                         if let Some(reporter) = self.reporter.as_mut() {
                             reporter.update_report_new_added_file(1);
                         };
@@ -201,31 +201,13 @@ impl<R: DataReader> Reporter<R> {
         Ok(report)
     }
 
-    async fn build_file_report(&mut self, file_name: String, game_set: GameSet, rom_mode: RomsetMode) -> Option<FileReport> {
-        let game_name = game_set.game.name.clone();
-        let sets_and_unknowns_result = self.on_set_found(game_set, rom_mode);
-
-        match sets_and_unknowns_result {
-            Ok(sets_and_unknowns) => {
-                let mut file_report = FileReport::new(file_name, rom_mode);
-                file_report.sets = sets_and_unknowns.0;
-                file_report.unknown = sets_and_unknowns.1;
-                Some(file_report)
-            }
-            Err(e) => { 
-                error!("Error getting report for game set `{}`: {}", game_name, e);
-                None
-            }
-        }
-    }
-
-    fn on_set_found(&mut self, game_set: GameSet, rom_mode: RomsetMode) -> Result<(Vec<SetReport>, Vec<DataFile>)> {
+    async fn build_file_report(&mut self, file_name: String, game_set: GameSet, rom_mode: RomsetMode) -> Result<FileReport> {
         let mut set_reports = vec![];
         let mut unknowns= vec![];
 
-        let rom_usage_result = self.data_reader.get_romsets_from_roms(game_set.roms, rom_mode)?;
+        let rom_usage = self.data_reader.get_romsets_from_roms(game_set.roms, rom_mode)?;
 
-        for entry in rom_usage_result.set_results {
+        for entry in rom_usage.set_results {
             let set_name = entry.0;
             let roms = entry.1;
 
@@ -234,11 +216,14 @@ impl<R: DataReader> Reporter<R> {
             set_reports.push(set_report);
         };
 
-        for unknown in rom_usage_result.unknowns {
+        for unknown in rom_usage.unknowns {
             unknowns.push(unknown);
         }
 
-        Ok((set_reports, unknowns))
+        let mut file_report = FileReport::new(file_name, rom_mode);
+        file_report.sets = set_reports;
+        file_report.unknown = unknowns;
+        Ok(file_report)
     }
 
     fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> {
@@ -248,7 +233,7 @@ impl<R: DataReader> Reporter<R> {
 
         roms.into_iter().for_each(|rom| {
             let found_rom = db_roms.iter().position(|set_rom| {
-                rom.deep_compare(&set_rom, FileChecks::ALL, false).ok().unwrap_or_else(|| false)
+                rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false)
             });
 
             match found_rom {

@@ -87,60 +87,11 @@ impl DataFile {
     }
 
     /// Compares two files with the requested info, if the info is not available in either file, the comparation is ignored
-    pub fn deep_compare(&self, other: &Self, file_checks: FileChecks, include_name: bool) -> Result<bool> {
-        let mut compared = false;
-        let mut result = if include_name {
-            self.name.eq(&other.name)
+    pub fn deep_compare(&self, other: &Self, file_checks: FileChecks) -> Result<bool> {
+        if !self.name.eq(&other.name) {
+            return Ok(false);
         } else {
-            true
-        };
-        
-        if file_checks.contains(FileChecks::SHA1) {
-            result = result && match (self.info.sha1.as_ref(), other.info.sha1.as_ref()) {
-                (Some(self_sha1), Some(other_sha1)) => {
-                    compared = true;
-                    self_sha1.eq(other_sha1)
-                },
-                _ => { true }
-            };
-        }
-
-        if file_checks.contains(FileChecks::MD5) {
-            result = result && match (self.info.md5.as_ref(), other.info.md5.as_ref()) {
-                (Some(self_md5), Some(other_md5)) => {
-                    compared = true;
-                    self_md5.eq(other_md5)
-                },
-                _ => { true }
-            }
-        }
-
-        if file_checks.contains(FileChecks::CRC) {
-            result = result && match (self.info.crc.as_ref(), other.info.crc.as_ref()) {
-                (Some(self_crc), Some(other_crc)) => {
-                    compared = true;
-                    self_crc.eq(other_crc)
-                },
-                _ => { true }
-            }
-        }
-
-        if file_checks.contains(FileChecks::SIZE) {
-            result = result && match (self.info.size.as_ref(), other.info.size.as_ref()) {
-                (Some(self_size), Some(other_size)) => {
-                    compared = true;
-                    self_size.eq(other_size)
-                },
-                _ => { true }
-            }
-        }
-
-        if compared {
-            Ok(result)
-        } else {
-            err!(RomstError::GenericError {
-                message: format!("Can't compare, not enough info:\n{}\n{}", self, other)
-            })
+            self.info.deep_compare(&other.info, file_checks)
         }
     }
 }
@@ -162,6 +113,59 @@ impl DataFileInfo {
             md5: None,
             crc: None,
             size: None,
+        }
+    }
+
+    pub fn deep_compare(&self, other: &Self, file_checks: FileChecks) -> Result<bool> {
+        let mut compared = false;
+        let mut result = true;
+        
+        if file_checks.contains(FileChecks::SHA1) {
+            result = result && match (self.sha1.as_ref(), other.sha1.as_ref()) {
+                (Some(self_sha1), Some(other_sha1)) => {
+                    compared = true;
+                    self_sha1.eq(other_sha1)
+                },
+                _ => { true }
+            };
+        }
+
+        if file_checks.contains(FileChecks::MD5) {
+            result = result && match (self.md5.as_ref(), other.md5.as_ref()) {
+                (Some(self_md5), Some(other_md5)) => {
+                    compared = true;
+                    self_md5.eq(other_md5)
+                },
+                _ => { true }
+            }
+        }
+
+        if file_checks.contains(FileChecks::CRC) {
+            result = result && match (self.crc.as_ref(), other.crc.as_ref()) {
+                (Some(self_crc), Some(other_crc)) => {
+                    compared = true;
+                    self_crc.eq(other_crc)
+                },
+                _ => { true }
+            }
+        }
+
+        if file_checks.contains(FileChecks::SIZE) {
+            result = result && match (self.size.as_ref(), other.size.as_ref()) {
+                (Some(self_size), Some(other_size)) => {
+                    compared = true;
+                    self_size.eq(other_size)
+                },
+                _ => { true }
+            }
+        }
+
+        if compared {
+            Ok(result)
+        } else {
+            err!(RomstError::GenericError {
+                message: format!("Can't compare, not enough info:\n{}\n{}", self, other)
+            })
         }
     }
 }
