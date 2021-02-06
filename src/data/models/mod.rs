@@ -4,13 +4,11 @@ pub mod set;
 pub mod game;
 pub mod file;
 
-pub fn does_file_belong_to_set<S>(file: S, set: S) -> bool where S: Into<String> {
-    let f = file.into();
-    let set_name: String = set.into();
-    let file_path = Path::new(&f);
+pub fn does_file_belong_to_set(file: &str, set: &str) -> bool {
+    let file_path = Path::new(file);
     if is_extension_for_file_set(&file_path) {
         if let Some(file_name) = file_path.file_stem() {
-            if file_name.eq(set_name.as_str()) {
+            if file_name.eq(set) {
                 return true;
             }
         };
