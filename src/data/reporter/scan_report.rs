@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::data::models::{self, file::DataFile};
 
@@ -33,8 +33,16 @@ impl ScanReport {
 
 pub struct Set {
     pub name: String,
-    pub roms_available: Vec<SetRom>,
-    pub roms_missing: Vec<DataFile>,
+    pub roms_available: HashMap<DataFile, RomLocatedAt>,
+    pub roms_missing: HashSet<DataFile>,
+    pub roms_to_spare: HashSet<DataFile>
+}
+
+#[derive(Debug, PartialEq)]
+pub enum RomLocatedAt {
+    InSet,
+    InSetWrongName(String),
+    InOthers(Vec<RomLocation>)
 }
 
 #[derive(Debug, PartialEq)]
@@ -48,32 +56,24 @@ impl Set {
     fn new<S>(name: S) -> Self where S: Into<String> {
         Self {
             name: name.into(),
-            roms_available: vec![],
-            roms_missing: vec![],
+            roms_available: HashMap::new(),
+            roms_missing: HashSet::new(),
+            roms_to_spare: HashSet::new(),
         }
     }
 
     pub fn is_complete(&self) -> SetStatus {
         if self.roms_missing.len() == 0 {
-            let available = self.roms_available.len();
-            let mut files_count = HashMap::new();
+            let mut available = self.roms_available.len();
 
             for set_rom in &self.roms_available {
-                for location in &set_rom.location {
-                    let number = files_count.entry(&location.file).or_insert(0);
-                    if location.with_name.eq(&set_rom.file.name) {
-                        *number += 1;
-                    }
+                if set_rom.1.eq(&RomLocatedAt::InSet) {
+                    available -= 1;
                 }
             }
 
-            for entry in files_count {
-                if entry.1.eq(&available) {
-                    let file_name = entry.0;
-                    if models::does_file_belong_to_set(file_name, &self.name) {
-                        return SetStatus::COMPLETE;
-                    }
-                }
+            if available == 0 {
+                return SetStatus::COMPLETE;
             }
 
             return SetStatus::FIXEABLE;
@@ -84,62 +84,55 @@ impl Set {
 
     pub fn add_set_rom(&mut self, location: RomLocation, file: DataFile) {
         let found = self.find_in_missing(&file);
-        if let Some(pos) = found {
-            self.roms_missing.remove(pos);
+        if found {
+            self.roms_missing.remove(&file);
         }
 
-        match self.roms_available.iter().position(|d| {
-            d.file.eq(&file)
-        }) {
-            Some(index) => {
-                self.roms_available[index].location.push(location);
+        let in_set = models::does_file_belong_to_set(location.file.as_str(), self.name.as_str());
+        let file_name = file.name.clone();
+        match self.roms_available.entry(file) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                if let RomLocatedAt::InOthers(ref mut locations) = entry.get_mut() {
+                    if !in_set {
+                        locations.push(location);
+                    }
+                }
             }
-            None => {
-                self.roms_available.push(SetRom::new(location, file));
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let av = if in_set {
+                    if location.with_name.eq(&file_name) {
+                        RomLocatedAt::InSet
+                    } else {
+                        RomLocatedAt::InSetWrongName(file_name)
+                    }
+                } else {
+                    RomLocatedAt::InOthers(vec![location])
+                };
+
+                entry.insert(av);
             }
-        };
+        }
     }
 
     pub fn add_missing_rom(&mut self, file: DataFile) {
         let found_unavailable = self.find_in_missing(&file);
         let found_available = self.find_in_available(&file);
 
-        if found_available == None && found_unavailable == None {
-            self.roms_missing.push(file);
+        if !found_available || !found_unavailable {
+            self.roms_missing.insert(file);
         }
     }
 
-    fn find_in_available(&self, file: &DataFile) -> Option<usize> {
-        self.roms_available.iter().position(|set_rom| {
-            if let Ok(comp) = file.info.deep_compare(&set_rom.file.info, FileChecks::ALL) {
-                return comp;
-            } else {
-                return false;
-            }
-        })
+    fn find_in_available(&self, file: &DataFile) -> bool {
+        self.roms_available.get(file).is_some()
     }
 
-    fn find_in_missing(&self, file: &DataFile) -> Option<usize> {
-        self.roms_missing.iter().position(|datafile| {
-            if let Ok(comp) = file.info.deep_compare(&datafile.info, FileChecks::ALL) {
-                return comp;
-            } else {
-                return false;
-            }
-        })
+    fn find_in_missing(&self, file: &DataFile) -> bool {
+        self.roms_missing.get(file).is_some()
     }
 }
 
-pub struct SetRom {
-    pub location: Vec<RomLocation>,
-    pub file: DataFile,
-}
-
-impl SetRom {
-    pub fn new(location: RomLocation, file: DataFile) -> Self { Self { location: vec![location], file } }
-}
-
-
+#[derive(Debug, PartialEq)]
 pub struct RomLocation {
     file: String,
     with_name: String,
