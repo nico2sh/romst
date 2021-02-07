@@ -29,7 +29,7 @@ pub trait ReportReporter {
 }
 
 enum ReportMessageContent {
-    FoundGameSet(GameSet),
+    GameSetBuilt(GameSet),
     FoundNotValid,
     FoundError,
     Done
@@ -111,10 +111,10 @@ impl<R: DataReader> Reporter<R> {
                         };
 
                         let mut file_reader = FileReader::new();
-                        let result = match file_reader.get_game_set(&p, file_checks) {
+                        let result = match file_reader.build_game_set(&p, file_checks) {
                             Ok(game_set) => {
                                 sender.send(ReportMessage::new(file_name,
-                                    ReportMessageContent::FoundGameSet(game_set))).await
+                                    ReportMessageContent::GameSetBuilt(game_set))).await
                             },
                             Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
                                 sender.send(ReportMessage::new(file_name,
@@ -163,8 +163,8 @@ impl<R: DataReader> Reporter<R> {
                 };
             }
             match message.content {
-                ReportMessageContent::FoundGameSet(game_set) => {
-                    if let Ok(file_report) = self.build_file_report(file_name, game_set, rom_mode).await {
+                ReportMessageContent::GameSetBuilt(file_game_set) => {
+                    if let Ok(file_report) = self.build_file_report(file_name, file_game_set, rom_mode).await {
                         if let Some(reporter) = self.reporter.as_mut() {
                             reporter.update_report_new_added_file(1);
                         };
@@ -201,23 +201,23 @@ impl<R: DataReader> Reporter<R> {
         Ok(report)
     }
 
-    async fn build_file_report(&mut self, file_name: String, game_set: GameSet, rom_mode: RomsetMode) -> Result<FileReport> {
+    async fn build_file_report(&mut self, file_name: String, file_game_set: GameSet, rom_mode: RomsetMode) -> Result<FileReport> {
         let mut set_reports = vec![];
         let mut unknowns= vec![];
 
-        let rom_usage = self.data_reader.get_romsets_from_roms(game_set.roms, rom_mode)?;
+        let rom_usage = self.data_reader.get_romsets_from_roms(file_game_set.roms, rom_mode)?;
 
-        for entry in rom_usage.set_results {
+        for entry in &rom_usage.set_results {
             let set_name = entry.0;
             let roms = entry.1;
 
-            let set_report = self.compare_roms_with_set(roms.into_iter().collect(), set_name, rom_mode)?;
+            let set_report = self.compare_roms_with_set(roms.get_roms_included(), set_name.to_owned(), rom_mode)?;
 
             set_reports.push(set_report);
         };
 
-        for unknown in rom_usage.unknowns {
-            unknowns.push(unknown);
+        for unknown in &rom_usage.unknowns {
+            unknowns.push(unknown.to_owned());
         }
 
         let mut file_report = FileReport::new(file_name, rom_mode);
@@ -226,10 +226,11 @@ impl<R: DataReader> Reporter<R> {
         Ok(file_report)
     }
 
-    fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> {
+    fn compare_roms_with_set<'a, I>(&self, roms: I, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> where I: IntoIterator<Item = &'a DataFile> {
+        // we get the roms for that set so we can compare which ones we are missing
         let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
 
-        let mut report = SetReport::new(set_name.clone());
+        let mut report = SetReport::new(set_name.as_str());
 
         roms.into_iter().for_each(|rom| {
             let found_rom = db_roms.iter().position(|set_rom| {
@@ -242,7 +243,7 @@ impl<R: DataReader> Reporter<R> {
                     if rom.name == set_rom.name {
                         report.roms_have.push(set_rom);
                     } else {
-                        let file_rename = FileRename::new(rom, set_rom.name);
+                        let file_rename = FileRename::new(rom.to_owned(), set_rom.name);
                         report.roms_to_rename.push(file_rename);
                     }
                 }

@@ -1,7 +1,8 @@
-use std::{collections::HashSet, fmt::Display, iter::FromIterator};
+use std::{collections::HashSet, fmt::Display, iter::{self, FromIterator}};
 
 use anyhow::Result;
 use console::Style;
+use iter::Map;
 use log::{debug, error, warn};
 use rusqlite::{Connection, ToSql, params};
 
@@ -126,10 +127,11 @@ impl <'d> DBReader <'d>{
             params.push(&rom_id.0);
         });
 
+        // We do a query with all the roms we received, the result will return all sets associateed with these roms
         let query = ROMS_QUERY.to_string() + " WHERE game_roms.rom_id IN (" + &ids_cond + ") ORDER BY game_roms.game_name;";
 
         let mut roms_stmt = self.conn.prepare(&query)?;
-        let roms_rows = roms_stmt.query_map(params, |row| {
+        let mut roms_rows = roms_stmt.query_map(params, |row| {
             let mut data_file_info = DataFileInfo::new(FileType::Rom);
             let rom_id: u32 = row.get(9)?;
             let name = match rom_ids.as_slice().into_iter().find(|p| { p.0 == rom_id }) {
@@ -153,10 +155,14 @@ impl <'d> DBReader <'d>{
                 row.get(8)?))
         })?.filter_map(|row| row.ok());
 
-        let mut result = RomSearch::new();
+        let mut roms = vec![];
+        roms_rows.by_ref().map(|item| {
+            roms.push(item.1);
+        });
+        let mut result = RomSearch::new(roms);
         for item in roms_rows {
             let game_name = item.0;
-            let rom = item.1;
+            let rom = &item.1;
             let game_parent: Option<String> = item.2;
             let clone_of: Option<String> = item.3;
 

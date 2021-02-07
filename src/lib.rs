@@ -111,7 +111,7 @@ impl Romst {
         Ok(games)
     }
 
-    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String, rom_mode: RomsetMode) -> Result<RomSearch> {
+    /*pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String, rom_mode: RomsetMode) -> Result<RomSearch> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.find_rom_usage(&game_name, &rom_name, rom_mode)
@@ -121,7 +121,7 @@ impl Romst {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.get_romset_shared_roms(&game_name, rom_mode)
-    }
+    }*/
 
     pub fn get_db_info(db_file: String) -> Result<DBReport> {
         let conn = Romst::get_r_connection(db_file)?;

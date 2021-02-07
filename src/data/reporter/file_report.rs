@@ -102,9 +102,9 @@ impl FileRename {
 }
 
 impl SetReport {
-    pub fn new(name: String) -> Self {
+    pub fn new<S>(name: S) -> Self where S: Into<String> {
         Self {
-            name,
+            name: name.into(),
             roms_have: vec![],
             roms_to_rename: vec![],
             roms_missing: vec![],
