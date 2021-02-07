@@ -118,7 +118,7 @@ fn main() {
             let game_name = ru.game;
             let rom_name = ru.rom;
             let set_mode = ru.set_mode.unwrap_or_default();
-            let execution = match rom_name {
+            /*let execution = match rom_name {
                 Some(rom) => {
                     Romst::get_rom_usage(db_file, game_name, rom, set_mode)
                 }
@@ -134,7 +134,7 @@ fn main() {
                 Err(e) => { println!("{} getting roms info.\n{}",
                     Style::new().red().apply_to("ERROR"),
                     e); }
-            }
+            }*/
         },
         SubCommand::DbInfo(db_info) => {
             match Romst::get_db_info(db_info.db) {

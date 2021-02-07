@@ -1,27 +1,94 @@
 pub mod sqlite;
 
-use std::{fmt::Display, collections::{HashMap, HashSet}};
+use std::{collections::{self, HashMap, HashSet}, fmt::Display};
 
 use crate::{RomsetMode, err, error::RomstError, filesystem::FileChecks};
 use super::models::{file::DataFile, game::Game, set::GameSet};
 use anyhow::Result;
+use collections::hash_map;
 use console::Style;
+use hash_map::Entry;
+use log::warn;
 
 #[derive(Debug)]
-pub struct RomSearch {
-    pub set_results: HashMap<String, HashSet<DataFile>>,
+pub struct RomSearch<'a> {
+    searched_roms: HashSet<DataFile>,
+    pub set_results: HashMap<String, SetContent<'a>>,
     pub unknowns: Vec<DataFile>
 }
 
-impl Display for RomSearch {
+impl <'a> RomSearch<'a> {
+    pub fn new<I>(searched_roms: I) -> Self where I: IntoIterator<Item = DataFile> {
+        Self { searched_roms: searched_roms.into_iter().collect(), set_results: HashMap::new(), unknowns: vec![] }
+    }
+    /*pub fn new<I>() -> Self {
+        Self { searched_roms: HashSet::new(), set_results: HashMap::new(), unknowns: vec![] }
+    }*/
+    pub fn add_file_for_set(&mut self, set_name: String, file: &DataFile) {
+        match self.set_results.entry(set_name) {
+            Entry::Occupied(mut entry) => {
+                let set_content = entry.get_mut();
+                if let Some(found) = set_content.roms_to_spare.take(file) {
+                    set_content.roms_included.insert(found);
+                } else {
+                    warn!("File {} not in searching roms", file);
+                };
+            }
+            Entry::Vacant(vacant_entry) => {
+                let mut set_content = SetContent::new();
+                for item in &self.searched_roms {
+                    if item.eq(file) {
+                        //set_content.roms_included.insert(item);
+                    } else {
+                        //set_content.roms_to_spare.insert(item);
+                    }
+                }
+                /*self.searched_roms.iter().for_each(|item| {
+                    if item.eq(file) {
+                        set_content.roms_included.insert(item);
+                    } else {
+                        set_content.roms_to_spare.insert(item);
+                    }
+                });*/
+                vacant_entry.insert(set_content);
+            }
+        }
+    }
+
+    fn add_rom_included() {
+
+    }
+
+    pub fn add_file_unknown(&mut self, file: DataFile) {
+        self.unknowns.push(file);
+    }
+}
+
+#[derive(Debug)]
+pub struct SetContent<'a> {
+    roms_included: HashSet<&'a DataFile>,
+    roms_to_spare: HashSet<&'a DataFile>
+}
+
+impl <'a> SetContent<'a> {
+    fn new() -> Self { Self { roms_included: HashSet::new(), roms_to_spare: HashSet::new() } }
+    pub fn get_roms_included(&self) -> Vec<&DataFile> {
+        let a = self.roms_included.iter().map(|data_file| {
+            data_file.clone()
+        }).collect::<Vec<_>>();
+        a
+    }
+}
+
+impl <'a> Display for RomSearch<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.set_results.len() > 0 {
             for game_roms in &self.set_results {
                 writeln!(f, "Set: {}", Style::new().green().bold().apply_to(game_roms.0))?;
-                let roms = game_roms.1;
-                if roms.len() > 0 {
+                let set_content = game_roms.1;
+                if set_content.roms_included.len() > 0 {
                     writeln!(f, "  {}:", Style::new().cyan().apply_to("Roms"))?;
-                    for rom in roms {
+                    for rom in &set_content.roms_included {
                         writeln!(f, "   - {}", rom)?;
                     }
                 }
@@ -36,16 +103,6 @@ impl Display for RomSearch {
         }
 
         Ok(())
-    }
-}
-
-impl RomSearch {
-    pub fn new() -> Self { Self { set_results: HashMap::new(), unknowns: vec![] } }
-    pub fn add_file_for_set(&mut self, set_name: String, file: DataFile) {
-        self.set_results.entry(set_name).or_insert(HashSet::new()).insert(file);
-    }
-    pub fn add_file_unknown(&mut self, file: DataFile) {
-        self.unknowns.push(file);
     }
 }
 
@@ -91,6 +148,7 @@ pub trait DataReader {
     /// This is useful to know what new (incomplete though) sets can be generated from the current one
     fn get_romset_shared_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql;
 
+    /// Finds all romsets associated with the roms sent
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch>;
 
     fn get_devices_for_game<S>(&self, game_name: S) -> Result<Vec<String>> where S: AsRef<str> + rusqlite::ToSql;
