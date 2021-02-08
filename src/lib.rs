@@ -5,10 +5,10 @@ mod macros;
 pub mod sysout;
 
 use console::Style;
-use data::{importer::{DatImporter, DatImporterReporter}, models::set::GameSet, reader::{DataReader, RomSearch, sqlite::{DBReader, DBReport}}, reporter::{ReportReporter, Reporter, file_report::Report}, writer::sqlite::DBWriter};
+use data::{importer::{DatImporter, DatImporterReporter}, models::set::GameSet, reader::{DataReader, RomSearch, sqlite::{DBReader, DBReport}}, reporter::{ReportReporter, Reporter, scan_report::ScanReport}, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use std::{path::Path, str::FromStr};
+use std::{fmt::Display, path::Path, str::FromStr};
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
@@ -24,6 +24,22 @@ pub enum RomsetMode {
 impl Default for RomsetMode {
     fn default() -> Self {
         RomsetMode::NonMerged
+    }
+}
+
+impl Display for RomsetMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RomsetMode::Merged => {
+                write!(f, "Merged")
+            }
+            RomsetMode::NonMerged => {
+                write!(f, "Non Merged")
+            }
+            RomsetMode::Split => {
+                write!(f, "Split")
+            }
+        }
     }
 }
 
@@ -129,7 +145,7 @@ impl Romst {
         reader.get_stats()
     }
 
-    pub fn get_report<R>(db_file: String, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode, reporter: Option<R>) -> Result<Report> where R: ReportReporter + 'static {
+    pub fn get_report<R>(db_file: String, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode, reporter: Option<R>) -> Result<ScanReport> where R: ReportReporter + 'static {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
 

@@ -131,7 +131,7 @@ impl <'d> DBReader <'d>{
         let query = ROMS_QUERY.to_string() + " WHERE game_roms.rom_id IN (" + &ids_cond + ") ORDER BY game_roms.game_name;";
 
         let mut roms_stmt = self.conn.prepare(&query)?;
-        let mut roms_rows = roms_stmt.query_map(params, |row| {
+        let roms_rows = roms_stmt.query_map(params, |row| {
             let mut data_file_info = DataFileInfo::new(FileType::Rom);
             let rom_id: u32 = row.get(9)?;
             let name = match rom_ids.as_slice().into_iter().find(|p| { p.0 == rom_id }) {
@@ -155,14 +155,10 @@ impl <'d> DBReader <'d>{
                 row.get(8)?))
         })?.filter_map(|row| row.ok());
 
-        let mut roms = vec![];
-        roms_rows.by_ref().map(|item| {
-            roms.push(item.1);
-        });
-        let mut result = RomSearch::new(roms);
+        let mut result = RomSearch::new();
         for item in roms_rows {
             let game_name = item.0;
-            let rom = &item.1;
+            let rom = item.1;
             let game_parent: Option<String> = item.2;
             let clone_of: Option<String> = item.3;
 

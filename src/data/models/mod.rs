@@ -4,11 +4,20 @@ pub mod set;
 pub mod game;
 pub mod file;
 
+pub fn get_set_from_file(file: &str) -> String {
+    let file_path = Path::new(file);
+    if let Some(set_name) = file_path.file_stem() {
+        set_name.to_string_lossy().to_string()
+    } else {
+        file.to_string()
+    }
+}
+
 pub fn does_file_belong_to_set(file: &str, set: &str) -> bool {
     let file_path = Path::new(file);
     if is_extension_for_file_set(&file_path) {
-        if let Some(file_name) = file_path.file_stem() {
-            if file_name.eq(set) {
+        if let Some(set_name) = file_path.file_stem() {
+            if set_name.eq(set) {
                 return true;
             }
         };
