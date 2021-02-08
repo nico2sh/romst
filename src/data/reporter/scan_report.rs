@@ -1,41 +1,78 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet, hash_map::Entry}, fmt::Display};
 
-use crate::data::models::{self, file::DataFile};
+use crate::{RomsetMode, data::models::{self, file::DataFile}};
 
-use crate::filesystem::FileChecks;
-use super::file_report::FileReport;
+use super::set_report::SetReport;
 
+#[derive(Debug)]
 pub struct ScanReport {
+    rom_mode: RomsetMode,
     pub sets: HashMap<String, Set>,
 }
 
-impl ScanReport {
-    pub fn new() -> Self { Self { sets: HashMap::new() } }
+impl Display for ScanReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Mode: {}", self.rom_mode)?;
+        for set in &self.sets {
+            let s = set.1; 
+            writeln!(f, "{}", s)?;
+        }
+        Ok(())
+    }
+}
 
-    pub fn add_file_report(&mut self, file_report: FileReport) {
-        let file_name = &file_report.file_name;
-        file_report.sets.into_iter().for_each(|set_report| {
-            let set_name = set_report.name.as_str();
-            let set = self.sets.entry(set_name.to_string()).or_insert(Set::new(set_name));
-            set_report.roms_have.into_iter().for_each(|rom| {
-                set.add_set_rom(RomLocation::new(file_name, &rom.name), rom);
-            });
-            set_report.roms_to_rename.into_iter().for_each(|file_rename| {
-                let rom = DataFile::new(file_rename.to, file_rename.from.info);
-                set.add_set_rom(RomLocation::new(file_name, &file_rename.from.name), rom);
-            });
-            set_report.roms_missing.into_iter().for_each(|missing| {
-                set.add_missing_rom(missing);
-            });
+impl ScanReport {
+    pub fn new(rom_mode: RomsetMode) -> Self { Self { rom_mode, sets: HashMap::new() } }
+
+    pub fn add_set_report(&mut self, set_report: SetReport, source_file: &String) {
+        let set_name = set_report.name.as_str();
+        let set = self.sets.entry(set_name.to_string()).or_insert(Set::new(set_name));
+        let roms_have = set_report.roms_have;
+        roms_have.into_iter().for_each(|rom| {
+            let rom_name = rom.name.clone();
+            set.add_set_rom(RomLocation::new(source_file.to_owned(), rom_name), rom);
+        });
+        set_report.roms_to_rename.into_iter().for_each(|file_rename| {
+            let rom = DataFile::new(file_rename.to, file_rename.from.info);
+            set.add_set_rom(RomLocation::new(source_file.to_owned(), file_rename.from.name), rom);
+        });
+        set_report.roms_missing.into_iter().for_each(|missing| {
+            set.add_missing_rom(missing);
+        });
+    }
+
+    pub fn add_unknown_files<I>(&mut self, files: I, source_file: String) where I: IntoIterator<Item = DataFile> {
+        let set_name = models::get_set_from_file(source_file.as_str());
+        let set = self.sets.entry(set_name.clone()).or_insert(Set::new(set_name));
+        for file in files {
+            set.unknown.push(file);
+        }
+    }
+
+    pub fn add_roms_to_spare<I>(&mut self, files: I, source_file: &String) where I: IntoIterator<Item = DataFile> {
+        let set_name = models::get_set_from_file(source_file.as_str());
+        let set = self.sets.entry(set_name.clone()).or_insert(Set::new(set_name));
+        files.into_iter().for_each(|rom| {
+            set.roms_to_spare.insert(rom);
         });
     }
 }
 
+#[derive(Debug)]
 pub struct Set {
     pub name: String,
     pub roms_available: HashMap<DataFile, RomLocatedAt>,
     pub roms_missing: HashSet<DataFile>,
-    pub roms_to_spare: HashSet<DataFile>
+    pub roms_to_spare: HashSet<DataFile>,
+    pub unknown: Vec<DataFile>
+}
+
+impl Display for Set {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Set Name: {}", self.name)?;
+        writeln!(f, "Status: {}", self.is_complete())?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -46,10 +83,26 @@ pub enum RomLocatedAt {
 }
 
 #[derive(Debug, PartialEq)]
-enum SetStatus {
+pub enum SetStatus {
     COMPLETE,
     FIXEABLE,
     INCOMPLETE
+}
+
+impl Display for SetStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SetStatus::COMPLETE => {
+                write!(f, "Complete")
+            }
+            SetStatus::FIXEABLE => {
+                write!(f, "Fixeable")
+            }
+            SetStatus::INCOMPLETE => {
+                write!(f, "Incomplete")
+            }
+        }
+    }
 }
 
 impl Set {
@@ -59,6 +112,7 @@ impl Set {
             roms_available: HashMap::new(),
             roms_missing: HashSet::new(),
             roms_to_spare: HashSet::new(),
+            unknown: vec![]
         }
     }
 
@@ -91,14 +145,14 @@ impl Set {
         let in_set = models::does_file_belong_to_set(location.file.as_str(), self.name.as_str());
         let file_name = file.name.clone();
         match self.roms_available.entry(file) {
-            std::collections::hash_map::Entry::Occupied(mut entry) => {
+            Entry::Occupied(mut entry) => {
                 if let RomLocatedAt::InOthers(ref mut locations) = entry.get_mut() {
                     if !in_set {
                         locations.push(location);
                     }
                 }
             }
-            std::collections::hash_map::Entry::Vacant(entry) => {
+            Entry::Vacant(entry) => {
                 let av = if in_set {
                     if location.with_name.eq(&file_name) {
                         RomLocatedAt::InSet
