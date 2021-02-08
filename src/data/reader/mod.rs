@@ -11,13 +11,13 @@ use hash_map::Entry;
 use log::warn;
 
 #[derive(Debug)]
-pub struct RomSearch<'a> {
+pub struct RomSearch {
     searched_roms: HashSet<DataFile>,
-    pub set_results: HashMap<String, SetContent<'a>>,
+    pub set_results: HashMap<String, SetContent>,
     pub unknowns: Vec<DataFile>
 }
 
-impl <'a> RomSearch<'a> {
+impl RomSearch {
     pub fn new<I>(searched_roms: I) -> Self where I: IntoIterator<Item = DataFile> {
         Self { searched_roms: searched_roms.into_iter().collect(), set_results: HashMap::new(), unknowns: vec![] }
     }
@@ -25,7 +25,9 @@ impl <'a> RomSearch<'a> {
         Self { searched_roms: HashSet::new(), set_results: HashMap::new(), unknowns: vec![] }
     }*/
     pub fn add_file_for_set(&mut self, set_name: String, file: &DataFile) {
-        match self.set_results.entry(set_name) {
+        let set_results = &mut self.set_results;
+        let searched_roms = &self.searched_roms;
+        match set_results.entry(set_name) {
             Entry::Occupied(mut entry) => {
                 let set_content = entry.get_mut();
                 if let Some(found) = set_content.roms_to_spare.take(file) {
@@ -36,11 +38,13 @@ impl <'a> RomSearch<'a> {
             }
             Entry::Vacant(vacant_entry) => {
                 let mut set_content = SetContent::new();
-                for item in &self.searched_roms {
+                let roms_included = &mut set_content.roms_included;
+                let roms_to_spare = &mut set_content.roms_to_spare;
+                for item in searched_roms {
                     if item.eq(file) {
-                        //set_content.roms_included.insert(item);
+                        roms_included.insert(item.to_owned());
                     } else {
-                        //set_content.roms_to_spare.insert(item);
+                        roms_to_spare.insert(item.to_owned());
                     }
                 }
                 /*self.searched_roms.iter().for_each(|item| {
@@ -55,24 +59,20 @@ impl <'a> RomSearch<'a> {
         }
     }
 
-    fn add_rom_included() {
-
-    }
-
     pub fn add_file_unknown(&mut self, file: DataFile) {
         self.unknowns.push(file);
     }
 }
 
 #[derive(Debug)]
-pub struct SetContent<'a> {
-    roms_included: HashSet<&'a DataFile>,
-    roms_to_spare: HashSet<&'a DataFile>
+pub struct SetContent {
+    roms_included: HashSet<DataFile>,
+    roms_to_spare: HashSet<DataFile>
 }
 
-impl <'a> SetContent<'a> {
+impl SetContent {
     fn new() -> Self { Self { roms_included: HashSet::new(), roms_to_spare: HashSet::new() } }
-    pub fn get_roms_included(&self) -> Vec<&DataFile> {
+    pub fn get_roms_included(&self) -> Vec<DataFile> {
         let a = self.roms_included.iter().map(|data_file| {
             data_file.clone()
         }).collect::<Vec<_>>();
@@ -80,7 +80,7 @@ impl <'a> SetContent<'a> {
     }
 }
 
-impl <'a> Display for RomSearch<'a> {
+impl  Display for RomSearch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.set_results.len() > 0 {
             for game_roms in &self.set_results {

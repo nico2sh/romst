@@ -226,7 +226,7 @@ impl<R: DataReader> Reporter<R> {
         Ok(file_report)
     }
 
-    fn compare_roms_with_set<'a, I>(&self, roms: I, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> where I: IntoIterator<Item = &'a DataFile> {
+    fn compare_roms_with_set<I>(&self, roms: I, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> where I: IntoIterator<Item = DataFile> {
         // we get the roms for that set so we can compare which ones we are missing
         let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
 
