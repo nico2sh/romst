@@ -177,9 +177,21 @@ impl Set {
         let file_name = file.name.clone();
         match self.roms_available.entry(file) {
             Entry::Occupied(mut entry) => {
-                if let RomLocatedAt::InOthers(ref mut locations) = entry.get_mut() {
-                    if !in_set {
-                        locations.push(location);
+                match entry.get_mut() {
+                    RomLocatedAt::InSet => {
+                        // We don't do anything, we already have the file
+                    }
+                    RomLocatedAt::InSetWrongName(_name) => {
+                        if in_set {
+                            entry.insert(RomLocatedAt::InSet);
+                        }
+                    }
+                    RomLocatedAt::InOthers(ref mut locations) => {
+                        if !in_set {
+                            locations.push(location);
+                        } else {
+                            entry.insert(RomLocatedAt::InSet);
+                        }
                     }
                 }
             }
@@ -283,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn has_incomplete_set() {
+    fn has_incomplete_set_then_complete() {
         let mut set = Set::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
             DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
@@ -293,6 +305,26 @@ mod tests {
 
         let completeness = set.is_complete();
         assert_eq!(SetStatus::INCOMPLETE, completeness);
+
+        set.add_set_rom(RomLocation::new("set1.zip", "file3"),
+            DataFile::new("file3", get_sample_rom("8bb3a81b9fa2de5163f0ffc634a998c455bcca25")));
+
+        let completeness = set.is_complete();
+        assert_eq!(SetStatus::COMPLETE, completeness);
+    }
+
+    #[test]
+    fn has_fixeable_then_complete() {
+        let mut set = Set::new("set1");
+        set.add_set_rom(RomLocation::new("set1.zip", "file1"),
+            DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
+        set.add_set_rom(RomLocation::new("set1.zip", "file2"),
+            DataFile::new("file2", DataFileInfo::new(FileType::Rom)));
+        set.add_set_rom(RomLocation::new("set2.zip", "file3"),
+            DataFile::new("file3", get_sample_rom("8bb3a81b9fa2de5163f0ffc634a998c455bcca25")));
+
+        let completeness = set.is_complete();
+        assert_eq!(SetStatus::FIXEABLE, completeness);
 
         set.add_set_rom(RomLocation::new("set1.zip", "file3"),
             DataFile::new("file3", get_sample_rom("8bb3a81b9fa2de5163f0ffc634a998c455bcca25")));
