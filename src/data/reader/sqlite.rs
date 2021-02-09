@@ -1,8 +1,7 @@
-use std::{collections::HashSet, fmt::Display, iter::{self, FromIterator}};
+use std::{collections::HashSet, fmt::Display, iter::FromIterator};
 
 use anyhow::Result;
 use console::Style;
-use iter::Map;
 use log::{debug, error, warn};
 use rusqlite::{Connection, ToSql, params};
 
@@ -454,7 +453,6 @@ mod tests {
     fn find_rom_id_from_sha1() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new("rom1", DataFileInfo::new(FileType::Rom));
@@ -475,7 +473,6 @@ mod tests {
     fn find_rom_id_from_sha1_and_crc() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new("rom1", DataFileInfo::new(FileType::Rom));
@@ -497,7 +494,6 @@ mod tests {
     fn find_rom_id_from_sha1_and_crc_and_md5_but_no_md5_in_db() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new("rom1", DataFileInfo::new(FileType::Rom));
@@ -520,7 +516,6 @@ mod tests {
     fn dont_find_rom_id_from_sha1_and_crc_and_wrong_size() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new("rom1", DataFileInfo::new(FileType::Rom));

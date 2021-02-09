@@ -53,6 +53,14 @@ impl RomSearch {
             vec![]
         }
     }
+
+    // returns the searched roms
+    pub fn get_searched_roms<'a>(&self) -> Vec<DataFile> {
+        let a = self.searched_roms.iter().map(|item| {
+            item.deref().to_owned()
+        }).collect::<Vec<_>>();
+        a
+    }
 }
 
 #[derive(Debug)]
