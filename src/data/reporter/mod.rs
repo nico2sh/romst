@@ -206,6 +206,8 @@ impl<R: DataReader> Reporter<R> {
     async fn add_set_report(&mut self, scan_report: &mut ScanReport, file_name: String, file_game_set: GameSet, rom_mode: RomsetMode) -> Result<()> {
         let rom_search = self.data_reader.get_romsets_from_roms(file_game_set.roms, rom_mode)?;
 
+        scan_report.set_in_file(&file_name);
+
         let mut matched_file_name_with_set = false;
         for entry in &rom_search.set_results {
             let set_name = entry.0;

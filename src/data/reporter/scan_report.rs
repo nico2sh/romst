@@ -42,6 +42,11 @@ impl ScanReport {
         });
     }
 
+    pub fn set_in_file(&mut self, source_file: &String) {
+        let set_name = models::get_set_from_file(source_file.as_str());
+        self.sets.entry(set_name.clone()).or_insert(Set::new(set_name)).in_file = true;
+    }
+
     pub fn add_unknown_files<I>(&mut self, files: I, source_file: String) where I: IntoIterator<Item = DataFile> {
         let set_name = models::get_set_from_file(source_file.as_str());
         let set = self.sets.entry(set_name.clone()).or_insert(Set::new(set_name));
@@ -62,6 +67,7 @@ impl ScanReport {
 #[derive(Debug)]
 pub struct Set {
     pub name: String,
+    pub in_file: bool,
     pub roms_available: HashMap<DataFile, RomLocatedAt>,
     pub roms_missing: HashSet<DataFile>,
     pub roms_to_spare: HashSet<DataFile>,
@@ -70,7 +76,12 @@ pub struct Set {
 
 impl Display for Set {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Set Name: {}", self.name)?;
+        write!(f, "Set Name: {}", self.name)?;
+        if self.in_file {
+            writeln!(f, " [in file]")?;
+        } else {
+            writeln!(f, "")?;
+        }
         writeln!(f, "Status: {}", self.is_complete())?;
         if self.roms_available.len() > 0 {
             writeln!(f, "Roms Available")?;
@@ -79,13 +90,13 @@ impl Display for Set {
                 let location = available.1;
                 match location {
                     RomLocatedAt::InSet => { writeln!(f, " - {}", rom.name)?; }
-                    RomLocatedAt::InSetWrongName(name) => { writeln!(f, " - {} (rename from: {})", rom.name, name)?; }
+                    RomLocatedAt::InSetWrongName(name) => { writeln!(f, " - {} [rename from: {}]", rom.name, name)?; }
                     RomLocatedAt::InOthers(locations) => {
                         let mut location_list = vec![];
                         for location in locations {
                             location_list.push(format!("{} as {}", location.file, location.with_name));
                         }
-                        writeln!(f, " - {} (located at: {})", rom.name, location_list.join(", "))?; 
+                        writeln!(f, " - {} [located at: {}]", rom.name, location_list.join(", "))?; 
                     }
                 }
             }
@@ -140,6 +151,7 @@ impl Set {
     fn new<S>(name: S) -> Self where S: Into<String> {
         Self {
             name: name.into(),
+            in_file: false,
             roms_available: HashMap::new(),
             roms_missing: HashSet::new(),
             roms_to_spare: HashSet::new(),
