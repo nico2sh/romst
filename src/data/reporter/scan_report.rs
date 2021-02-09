@@ -13,6 +13,7 @@ pub struct ScanReport {
 impl Display for ScanReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Mode: {}", self.rom_mode)?;
+        writeln!(f, "")?;
         for set in &self.sets {
             let s = set.1; 
             writeln!(f, "{}", s)?;
@@ -71,6 +72,36 @@ impl Display for Set {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Set Name: {}", self.name)?;
         writeln!(f, "Status: {}", self.is_complete())?;
+        if self.roms_available.len() > 0 {
+            writeln!(f, "Roms Available")?;
+            for available in &self.roms_available {
+                let rom = available.0;
+                let location = available.1;
+                match location {
+                    RomLocatedAt::InSet => { writeln!(f, " - {}", rom.name)?; }
+                    RomLocatedAt::InSetWrongName(name) => { writeln!(f, " - {} (rename from: {})", rom.name, name)?; }
+                    RomLocatedAt::InOthers(locations) => {
+                        let mut location_list = vec![];
+                        for location in locations {
+                            location_list.push(format!("{} as {}", location.file, location.with_name));
+                        }
+                        writeln!(f, " - {} (located at: {})", rom.name, location_list.join(", "))?; 
+                    }
+                }
+            }
+        }
+        if self.roms_missing.len() > 0 {
+            writeln!(f, "Roms Missing")?;
+            for missing in &self.roms_missing {
+                writeln!(f, " - {}", missing.name)?;
+            }
+        }
+        if self.roms_to_spare.len() > 0 {
+            writeln!(f, "Roms to Spare")?;
+            for to_spare in &self.roms_to_spare {
+                writeln!(f, " - {}", to_spare.name)?;
+            }
+        }
         Ok(())
     }
 }
@@ -169,10 +200,10 @@ impl Set {
     }
 
     pub fn add_missing_rom(&mut self, file: DataFile) {
-        let found_unavailable = self.find_in_missing(&file);
+        let found_in_missing = self.find_in_missing(&file);
         let found_available = self.find_in_available(&file);
 
-        if !found_available || !found_unavailable {
+        if !found_available && !found_in_missing {
             self.roms_missing.insert(file);
         }
     }
