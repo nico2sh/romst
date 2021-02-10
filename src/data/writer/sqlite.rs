@@ -221,7 +221,8 @@ impl <'d> DBWriter<'d> {
             params![])?;
         debug!("Creating Games indexes");
         // Indexes
-        self.conn.execute("CREATE INDEX games_parents ON games(clone_of);", params![])?;
+        self.conn.execute("CREATE INDEX games_parents_roms ON games(rom_of);", params![])?;
+        self.conn.execute("CREATE INDEX games_parents_clone ON games(clone_of);", params![])?;
         self.conn.execute("CREATE INDEX games_samples ON games(sample_of);", params![])?;
 
         Ok(())
@@ -443,8 +444,8 @@ impl <'d> DBWriter<'d> {
 
     fn get_roms_from_parents(&mut self) -> Result<Vec<(String, u32, String)>>{
         let mut stmt = self.conn.prepare("SELECT games.name AS game_name, game_roms.rom_id, game_roms.game_name as parent, game_roms.name FROM game_roms
-            JOIN games ON games.clone_of = game_roms.game_name
-            WHERE games.clone_of IS NOT NULL;")?;
+            JOIN games ON games.rom_of = game_roms.game_name
+            WHERE games.rom_of IS NOT NULL;")?;
         let rows = stmt.query_map(params![], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })?.filter_map(|row| row.ok());

@@ -1,12 +1,14 @@
-pub mod report;
+pub mod set_report;
+pub mod scan_report;
 
 use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
-use self::report::{FileRename, FileReport, Report, SetReport};
+use self::set_report::{FileRename, SetReport};
 
-use super::{models::{file::DataFile, set::GameSet}, reader::{self, DataReader}};
+use super::{models::{self, file::DataFile, set::GameSet}, reader::DataReader};
 use anyhow::Result;
 use crossbeam::sync::WaitGroup;
+use scan_report::ScanReport;
 use tokio::sync::mpsc::{Receiver, channel};
 use log::{error, warn};
 
@@ -28,7 +30,7 @@ pub trait ReportReporter {
 }
 
 enum ReportMessageContent {
-    FoundGameSet(GameSet),
+    GameSetBuilt(GameSet),
     FoundNotValid,
     FoundError,
     Done
@@ -50,7 +52,7 @@ impl<R: DataReader> Reporter<R> {
         self.reporter = Some(Box::new(reporter));
     }
 
-    pub async fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
+    pub async fn check(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<ScanReport> {
         if file_paths.len() == 1 {
             if let Some(path) = file_paths.get(0) {
                 let p = path.as_ref();
@@ -63,7 +65,7 @@ impl<R: DataReader> Reporter<R> {
         self.check_files(file_paths, rom_mode).await
     }
 
-    async fn check_directory(&mut self, file_path: &impl AsRef<Path>, rom_mode: RomsetMode) -> Result<Report> {
+    async fn check_directory(&mut self, file_path: &impl AsRef<Path>, rom_mode: RomsetMode) -> Result<ScanReport> {
         let path = file_path.as_ref();
         if path.is_dir() {
             let contents = path.read_dir()?.into_iter().filter_map(|dir_entry| {
@@ -110,10 +112,10 @@ impl<R: DataReader> Reporter<R> {
                         };
 
                         let mut file_reader = FileReader::new();
-                        let result = match file_reader.get_game_set(&p, file_checks) {
+                        let result = match file_reader.build_game_set(&p, file_checks) {
                             Ok(game_set) => {
                                 sender.send(ReportMessage::new(file_name,
-                                    ReportMessageContent::FoundGameSet(game_set))).await
+                                    ReportMessageContent::GameSetBuilt(game_set))).await
                             },
                             Err(RomstIOError::NotValidFileError(file_name, _file_type )) => {
                                 sender.send(ReportMessage::new(file_name,
@@ -150,10 +152,11 @@ impl<R: DataReader> Reporter<R> {
         Ok(receiver)
     }
 
-    async fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<Report> {
+    async fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<ScanReport> {
         let mut rx = self.send_sets_from_files(file_paths).await?;
 
-        let mut r = vec![];
+        let mut scan_report = ScanReport::new(rom_mode);
+
         while let Some(message) = rx.recv().await {
             let file_name = message.file_name;
             if !file_name.eq("") {
@@ -162,16 +165,18 @@ impl<R: DataReader> Reporter<R> {
                 };
             }
             match message.content {
-                ReportMessageContent::FoundGameSet(game_set) => {
-                    if let Some(file_report) = self.build_file_report(file_name, game_set, rom_mode).await {
-                        if let Some(reporter) = self.reporter.as_mut() {
-                            reporter.update_report_new_added_file(1);
-                        };
-                        r.push(file_report)
-                    } else {
-                        if let Some(reporter) = self.reporter.as_mut() {
-                            reporter.update_report_file_error(1);
-                        };
+                ReportMessageContent::GameSetBuilt(file_game_set) => {
+                    match self.add_set_report(&mut scan_report, file_name, file_game_set, rom_mode).await {
+                        Ok(_) => {
+                            if let Some(reporter) = self.reporter.as_mut() {
+                                reporter.update_report_new_added_file(1);
+                            };
+                        }
+                        Err(_) => {
+                            if let Some(reporter) = self.reporter.as_mut() {
+                                reporter.update_report_file_error(1);
+                            };
+                        }
                     }
                 }
                 ReportMessageContent::FoundNotValid => {
@@ -192,72 +197,60 @@ impl<R: DataReader> Reporter<R> {
             }
         };
 
-        let report = Report::from_files(rom_mode, r);
-
         if let Some(reporter) = self.reporter.as_mut() {
             reporter.finish();
         }
-        Ok(report)
+        Ok(scan_report)
     }
 
-    async fn build_file_report(&mut self, file_name: String, game_set: GameSet, rom_mode: RomsetMode) -> Option<FileReport> {
-        let game_name = game_set.game.name.clone();
-        let sets_and_unknowns_result = self.on_set_found(game_set, rom_mode);
+    async fn add_set_report(&mut self, scan_report: &mut ScanReport, file_name: String, file_game_set: GameSet, rom_mode: RomsetMode) -> Result<()> {
+        let rom_search = self.data_reader.get_romsets_from_roms(file_game_set.roms, rom_mode)?;
 
-        match sets_and_unknowns_result {
-            Ok(sets_and_unknowns) => {
-                let mut file_report = FileReport::new(file_name, rom_mode);
-                file_report.sets = sets_and_unknowns.0;
-                file_report.unknown = sets_and_unknowns.1;
-                Some(file_report)
-            }
-            Err(e) => { 
-                error!("Error getting report for game set `{}`: {}", game_name, e);
-                None
-            }
-        }
-    }
+        scan_report.set_in_file(&file_name);
 
-    fn on_set_found(&mut self, game_set: GameSet, rom_mode: RomsetMode) -> Result<(Vec<SetReport>, Vec<DataFile>)> {
-        let mut set_reports = vec![];
-        let mut unknowns= vec![];
-
-        let rom_usage_result = self.data_reader.get_romsets_from_roms(game_set.roms, rom_mode)?;
-
-        for entry in rom_usage_result.set_results {
+        let mut matched_file_name_with_set = false;
+        for entry in &rom_search.set_results {
             let set_name = entry.0;
             let roms = entry.1;
 
-            let set_report = self.compare_roms_with_set(roms.into_iter().collect(), set_name, rom_mode)?;
+            let set_report = self.compare_roms_with_set(roms.get_roms_included(), set_name.to_owned(), rom_mode)?;
 
-            set_reports.push(set_report);
+            scan_report.add_set_report(set_report, &file_name);
+
+            if models::does_file_belong_to_set(file_name.as_str(), set_name.as_str()) {
+                matched_file_name_with_set = true;
+                scan_report.add_roms_to_spare(rom_search.get_roms_to_spare_for_set(&set_name), &file_name);
+            }
         };
 
-        for unknown in rom_usage_result.unknowns {
-            unknowns.push(unknown);
+        if !matched_file_name_with_set {
+            let spare = rom_search.get_searched_roms();
+            scan_report.add_roms_to_spare(spare, &file_name);
         }
 
-        Ok((set_reports, unknowns))
+        scan_report.add_unknown_files(rom_search.unknowns, file_name);
+
+        Ok(())
     }
 
-    fn compare_roms_with_set(&mut self, roms: Vec<DataFile>, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> {
+    fn compare_roms_with_set<'a, I>(&self, roms: I, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> where I: IntoIterator<Item = &'a DataFile> {
+        // we get the roms for that set so we can compare which ones we are missing
         let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
-
-        let mut report = SetReport::new(set_name.clone());
+        let mut set_report = SetReport::new(set_name.as_str());
 
         roms.into_iter().for_each(|rom| {
             let found_rom = db_roms.iter().position(|set_rom| {
-                rom.deep_compare(&set_rom, FileChecks::ALL, false).ok().unwrap_or_else(|| false)
+                rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false)
             });
 
             match found_rom {
                 Some(set_rom_pos) => {
                     let set_rom = db_roms.remove(set_rom_pos);
                     if rom.name == set_rom.name {
-                        report.roms_have.push(set_rom);
+                        set_report.roms_have.push(set_rom);
                     } else {
-                        let file_rename = FileRename::new(rom, set_rom.name);
-                        report.roms_to_rename.push(file_rename);
+                        let file_rename = FileRename::new(rom.to_owned(), set_rom.name);
+                        set_report.roms_to_rename.push(file_rename);
                     }
                 }
                 None => {
@@ -266,11 +259,11 @@ impl<R: DataReader> Reporter<R> {
             }
         });
 
-        report.roms_missing = db_roms.into_iter().filter_map(|rom| {
+        set_report.roms_missing = db_roms.into_iter().filter_map(|rom| {
             Some(rom)
         }).collect();
 
-        Ok(report)
+        Ok(set_report)
     }
 }
 
@@ -347,20 +340,31 @@ mod tests {
         }
     }
 
-    fn assert_file_report(report: &Report, file_name: &str, report_name: &str, roms_have: usize, roms_missing: usize, roms_to_rename: usize, roms_unneeded: usize) {
-        let report_sets = &report.files;
-        let assert_result = report_sets.iter().filter(|file_report| {
-            file_report.file_name == file_name &&
-            file_report.unknown.len() == roms_unneeded &&
-            if file_report.sets.len() == 1 {
-                let set_report = &file_report.sets[0];
-                set_report.name == report_name
-                && set_report.roms_have.len() == roms_have
-                && set_report.roms_missing.len() == roms_missing
-                && set_report.roms_to_rename.len() == roms_to_rename
-            } else {
-                false
-            }
+    fn assert_file_report(report: &ScanReport, file_name: &str, set_name: &str, roms_have: usize, roms_missing: usize, roms_to_rename: usize, roms_unneeded: usize, roms_unknown: usize) {
+        let report_sets = &report.sets;
+        let assert_result = report_sets.iter().filter(|set_report| {
+            let set = set_report.1;
+            let mut have = 0;
+            let mut rename = 0;
+            set.roms_available.iter().for_each(|rom| {
+                match rom.1 {
+                    scan_report::RomLocatedAt::InSet => {
+                        have += 1;
+                    }
+                    scan_report::RomLocatedAt::InSetWrongName(_) => {
+                        rename += 1;
+                    }
+                    scan_report::RomLocatedAt::InOthers(_) => {
+                        rename += 1;
+                    }
+                }
+            });
+            set.name == set_name &&
+            set.roms_to_spare.len() == roms_unneeded &&
+            have == roms_have &&
+            rename == roms_to_rename &&
+            set.unknown.len() == roms_unknown &&
+            set.roms_missing.len() == roms_missing
         }).collect::<Vec<_>>().len();
         if assert_result != 1{
             println!("Test failed with asserting filename {}, found {} coincidences.\nReport:\n{}",
@@ -393,13 +397,13 @@ mod tests {
         assert_eq!(inner.borrow().ignored, 0);
         assert_eq!(inner.borrow().error, 0);
         assert!(inner.borrow().finished);
-        let report_sets = &report.files;
-        assert_eq!(report_sets.len(), 5);
-        tests::assert_file_report(&report, "device1.zip", "device1", 1, 0, 0, 0);
-        tests::assert_file_report(&report, "game1.zip", "game1", 4, 2, 0, 0);
-        tests::assert_file_report(&report, "game1a.zip", "game1", 2, 4, 0, 0);
-        tests::assert_file_report(&report, "game2.zip", "game2", 3, 0, 0, 0);
-        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0);
+        //let report_sets = &report.files;
+        //assert_eq!(report_sets.len(), 5);
+        tests::assert_file_report(&report, "device1.zip", "device1", 1, 0, 0, 0, 0);
+        tests::assert_file_report(&report, "game1.zip", "game1", 4, 0, 2, 0, 0);
+        tests::assert_file_report(&report, "game1a.zip", "game1a", 0, 0, 0, 2, 0);
+        tests::assert_file_report(&report, "game2.zip", "game2", 3, 0, 0, 0, 0);
+        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0, 0);
 
         Ok(())
     }
@@ -426,11 +430,11 @@ mod tests {
         assert_eq!(inner.borrow().ignored, 1);
         assert_eq!(inner.borrow().error, 0);
         assert!(inner.borrow().finished);
-        let report_sets = &report.files;
-        assert_eq!(report_sets.len(), 3);
-        tests::assert_file_report(&report, "game1.zip", "game1", 3, 1, 0, 0);
-        tests::assert_file_report(&report, "game2.zip", "game2", 2, 0, 1, 0);
-        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 1);
+        //let report_sets = &report.files;
+        //assert_eq!(report_sets.len(), 3);
+        tests::assert_file_report(&report, "game1.zip", "game1", 3, 1, 0, 0, 0);
+        tests::assert_file_report(&report, "game2.zip", "game2", 2, 0, 1, 0, 0);
+        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0, 1);
 
         Ok(())
     }

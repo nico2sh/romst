@@ -34,7 +34,7 @@ impl FileReader {
         } 
     }
 
-    pub fn get_game_set(&mut self, file_path: &impl AsRef<Path>, file_checks: FileChecks) -> Result<GameSet, RomstIOError> {
+    pub fn build_game_set(&mut self, file_path: &impl AsRef<Path>, file_checks: FileChecks) -> Result<GameSet, RomstIOError> {
         let no_path = Path::new(file_path.as_ref()).with_extension("");
         let base_file_name = no_path.file_name();
 
@@ -119,7 +119,7 @@ mod tests {
     fn gets_zip_info() -> Result<()> {
         let mut file_reader: FileReader = FileReader::new();
         let file_path = Path::new("testdata").join("split").join("game1.zip");
-        let game_set = file_reader.get_game_set(&file_path, FileChecks::ALL)?;
+        let game_set = file_reader.build_game_set(&file_path, FileChecks::ALL)?;
         println!("Game Set: {}", game_set);
 
         assert!(game_set.game.name == "game1");
