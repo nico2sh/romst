@@ -61,9 +61,10 @@ Rom size = row.get(5)?;
 Rom status = row.get(6)?;
 Rom parent = row.get(7)?;
 Game clone_of = row.get(8)?;
-Rom id = row.get(9)?;
+Game rom_of = row.get(9)?;
+Rom id = row.get(10)?;
 */
-const ROMS_QUERY: &str = "SELECT DISTINCT game_roms.game_name, game_roms.name as rom_name, roms.sha1, roms.md5, roms.crc, roms.size, game_roms.status, game_roms.parent, games.clone_of, roms.id
+const ROMS_QUERY: &str = "SELECT DISTINCT game_roms.game_name, game_roms.name as rom_name, roms.sha1, roms.md5, roms.crc, roms.size, game_roms.status, game_roms.parent, games.clone_of, games.rom_of, roms.id
                 FROM game_roms JOIN roms ON game_roms.rom_id = roms.id JOIN games ON game_roms.game_name = games.name";
 
 #[derive(Debug)]
@@ -132,7 +133,7 @@ impl <'d> DBReader <'d>{
         let mut roms_stmt = self.conn.prepare(&query)?;
         let roms_rows = roms_stmt.query_map(params, |row| {
             let mut data_file_info = DataFileInfo::new(FileType::Rom);
-            let rom_id: u32 = row.get(9)?;
+            let rom_id: u32 = row.get(10)?;
             let name = match rom_ids.as_slice().into_iter().find(|p| { p.0 == rom_id }) {
                 Some(result) => {
                     let data_file = &result.1;
@@ -151,7 +152,8 @@ impl <'d> DBReader <'d>{
             Ok((row.get(0)?,
                 data_file,
                 row.get(7)?,
-                row.get(8)?))
+                row.get(8)?,
+                row.get(9)?))
         })?.filter_map(|row| row.ok());
 
         let mut result = RomSearch::new();
@@ -159,11 +161,12 @@ impl <'d> DBReader <'d>{
             let game_name = item.0;
             let rom = item.1;
             let game_parent: Option<String> = item.2;
-            let clone_of: Option<String> = item.3;
+            let _clone_of: Option<String> = item.3;
+            let rom_of: Option<String> = item.4;
 
             match rom_mode {
                 RomsetMode::Merged => {
-                    if let Some(game_parent_name) = clone_of {
+                    if let Some(game_parent_name) = rom_of {
                         result.add_file_for_set(game_parent_name, rom);
                     } else {
                         result.add_file_for_set(game_name, rom);
@@ -294,7 +297,7 @@ impl <'d> DataReader for DBReader<'d> {
         let mut query = ROMS_QUERY.to_string();
         match rom_mode {
             RomsetMode::Merged => {
-                query.push_str(" WHERE (game_roms.game_name = ?1 OR games.clone_of = ?1);");
+                query.push_str(" WHERE (game_roms.game_name = ?1 OR games.rom_of = ?1);");
             }
             RomsetMode::NonMerged => {
                 query.push_str(" WHERE game_roms.game_name = ?1");

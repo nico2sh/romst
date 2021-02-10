@@ -428,7 +428,7 @@ mod tests {
             Ok(())
         }
 
-        fn on_new_entry(&mut self, game: Game, _roms: Vec<DataFile>, _disks: Vec<DataFile>, _samples: Vec<String>, _device_refs: Vec<String>) -> Result<()> {
+        fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
             self.games.borrow_mut().push(game.name);
 
             Ok(())
