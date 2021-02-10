@@ -423,6 +423,13 @@ mod tests {
         assert!(data_files.iter().find(|f| { f.name == "rom4.trom".to_string()} ).is_some());
         assert!(data_files.iter().find(|f| { f.name == "rom5.trom".to_string()} ).is_some());
 
+        let data_files = data_reader.get_romset_roms(&"game4".to_string(), RomsetMode::Split)?;
+        assert_eq!(data_files.len(), 4);
+        assert!(data_files.iter().find(|f| { f.name == "rrham.rom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.name == "rhum1.rom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.name == "rhum2.rom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.name == "rhin1.rom".to_string()} ).is_some());
+
         Ok(())
     }
 
