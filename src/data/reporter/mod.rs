@@ -390,9 +390,9 @@ mod tests {
         let game_path = Path::new("testdata").join("split");
         let report = reporter.check(vec![ game_path ], RomsetMode::Merged).await?;
 
-        assert_eq!(inner.borrow().total_files, 5);
-        assert_eq!(inner.borrow().current_files, 5);
-        assert_eq!(inner.borrow().new_files, 5);
+        assert_eq!(inner.borrow().total_files, 6);
+        assert_eq!(inner.borrow().current_files, 6);
+        assert_eq!(inner.borrow().new_files, 6);
         assert_eq!(inner.borrow().directories, 0);
         assert_eq!(inner.borrow().ignored, 0);
         assert_eq!(inner.borrow().error, 0);
@@ -404,6 +404,7 @@ mod tests {
         tests::assert_file_report(&report, "game1a.zip", "game1a", 0, 0, 0, 2, 0);
         tests::assert_file_report(&report, "game2.zip", "game2", 3, 0, 0, 0, 0);
         tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0, 0);
+        tests::assert_file_report(&report, "game4.zip", "game4", 4, 0, 0, 0, 0);
 
         Ok(())
     }

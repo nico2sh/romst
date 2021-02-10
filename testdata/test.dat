@@ -26,7 +26,7 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<device_ref name="deviceref"/>
 	</machine>
 	<machine name="game0" sourcefile="gamelib.cpp">
-		<description>Game 0</description>
+		<description>Game 0 with a no dump</description>
 		<year>1989</year>
 		<manufacturer>None</manufacturer>
 		<rom name="romnone.rom" size="2048" status="nodump"/>
@@ -34,7 +34,7 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<driver status="imperfect"/>
 	</machine>
 	<machine name="game1" sourcefile="gamelib.cpp">
-		<description>Game 1</description>
+		<description>Game 1 which is a parent</description>
 		<year>1999</year>
 		<manufacturer>Acme</manufacturer>
 		<rom name="rom1.trom" size="2048" crc="1d460eee" sha1="8bb3a81b9fa2de5163f0ffc634a998c455bcca25"/>
@@ -72,7 +72,7 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<rom name="binary3.bin" size="4096" crc="a1bc3e50" sha1="901fba08a51ec46b3858c4a802b9c96ba826122f"/>
 	</machine>
 	<machine name="game3" sampleof"samplos3">
-		<description>Game 3</description>
+		<description>Game 3 with samples</description>
 		<year>2000</year>
 		<manufacturer>Acme</manufacturer>
 		<rom name="file1.rom" size="2048" crc="80e71f71" sha1="cc218850743cff0cc46cc1c711176c5bf199c306" />
@@ -81,6 +81,15 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<sample name="sample1" />
 		<sample name="sample2" />
 		<sample name="sample3" />
+	</machine>
+	<machine name="game4">
+		<description>Game 4 with a duplicated rom</description>
+		<year>1984</year>
+		<manufacturer>Lagos</manufacturer>
+		<rom name="rrham.rom" size="2048" crc="7182d83b" SHA1="b47a81a4bce8d7abd8f940b0acb5674776b4ae03" />
+		<rom name="rhum1.rom" size="2048" crc="4bec6e65" SHA1="0d0410009c5bd3802b0021c8f29edc997a83c88c" />
+		<rom name="rhum2.rom" size="2048" crc="4bec6e65" SHA1="0d0410009c5bd3802b0021c8f29edc997a83c88c" />
+		<rom name="rhin1.rom" size="2048" crc="0d46fa2d" SHA1="5bef439d1d775e0ff3a17189478e87b3dd5d0e49" />
 	</machine>
 </datafile>
 
