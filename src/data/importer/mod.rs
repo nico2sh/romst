@@ -60,7 +60,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
             match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
-                        match name.to_lowercase().as_str() {
+                        match name.to_lowercase().trim() {
                             "datafile" => {
                                 self.read_datafile()?;
                             },
@@ -73,11 +73,11 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
                     }
                 },
                 Event::Eof => {
-                    if let Some(reporter) = self.reporter.as_ref() {
+                    if let Some(ref reporter) = self.reporter {
                         reporter.start_finish();
                     }
                     self.writer.finish()?;
-                    if let Some(reporter) = self.reporter.as_ref() {
+                    if let Some(ref reporter) = self.reporter {
                         reporter.finish();
                     }
                     break
@@ -97,7 +97,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
             match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
-                        match name.to_lowercase().as_str() {
+                        match name.to_lowercase().trim() {
                             "machine" | "game" => self.read_game_entry( String::from_utf8(e.name().to_vec())?, e.attributes())?,
                             "header" => self.read_dat_header()?,
                             tag_name => self.consume_tag(tag_name.to_string())?,
@@ -106,7 +106,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
                 },
                 Event::End(e) => {
                     if let Ok(name) = str::from_utf8(e.name()){
-                        if name.to_lowercase().eq("datafile") {
+                        if name.to_lowercase().trim() == "datafile" {
                             return Ok(());
                         } else {
                             return err!(RomstError::UnexpectedTagClose { 
@@ -130,11 +130,11 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
         loop {
             match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
-                    self.consume_tag(String::from_utf8(e.name().to_vec())?)?;
+                    self.consume_tag(str::from_utf8(e.name())?.trim().to_string())?;
                 },
                 Event::End(e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
-                        if name.to_lowercase() == tag {
+                        if name.trim().to_lowercase() == tag {
                             return Ok(());
                         } else {
                             return err!(RomstError::UnexpectedTagClose { 
@@ -156,7 +156,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
         let text;
         match self.reader.read_event(&mut buf)? {
             Event::Text(t) => {
-                text = t.unescape_and_decode(&self.reader)?
+                text = t.unescape_and_decode(&self.reader)?.trim().to_string()
             },
             Event::End(_e) => {
                 return Ok(String::from(""));
@@ -178,17 +178,18 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
 
     fn read_mame_header(&mut self, attributes: Attributes) {
         process_attributes(attributes, |key, value| {
-            match key.to_lowercase().as_str() {
+            let val = value.trim();
+            match key.to_lowercase().trim() {
                 "build" => {
-                    let build = String::from(value);
+                    let build = String::from(val);
                     info!("Build: {}", build);
                 },
                 "debug" => {
-                    let debug = String::from(value);
+                    let debug = String::from(val);
                     info!("Debug: {}", debug);
                 },
                 "mameconfig" => {
-                    let mameconfig = String::from(value);
+                    let mameconfig = String::from(val);
                     info!("Mameconfig: {}", mameconfig);
                 },
                 k => debug!("Unknown atribute parsing: {}", k),
@@ -202,7 +203,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
             match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
-                        match name.to_lowercase().as_str() {
+                        match name.to_lowercase().trim() {
                             "name" => {
                                 let name = self.get_text()?;
                                 info!("Name: {}", name);
@@ -225,7 +226,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
                             },
                             tag_name => {
                                 // we consume the tag
-                                self.consume_tag(tag_name.to_string())?;
+                                self.consume_tag(tag_name.trim().to_string())?;
                             },
                         }
                     }
@@ -252,7 +253,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
             match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
-                        match name.to_lowercase().as_str() {
+                        match name.to_lowercase().trim() {
                             "description" => {
                                 let desc = self.get_text()?;
                                 game.info_description = Some(desc);
@@ -265,13 +266,13 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
                                 let manuf = self.get_text()?;
                                 game.info_manufacturer = Some(manuf);
                             },
-                            n => self.consume_tag(n.to_string())?
+                            n => self.consume_tag(n.trim().to_string())?
                         }
                     }
                 },
                 Event::Empty(e) => {
                     if let Ok(name) = str::from_utf8(e.name()) {
-                        match name.to_lowercase().as_str() {
+                        match name.to_lowercase().trim() {
                             "rom" => {
                                 let rom = file_from_attributes(FileType::Rom, e.attributes())?;
                                 roms.push(rom);
@@ -297,7 +298,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
                     }
                 },
                 Event::End(e) => {
-                    if String::from_utf8(e.name().to_vec())? == entry_type {
+                    if str::from_utf8(e.name())?.trim() == entry_type {
                         break;
                     } else {
                         return err!(RomstError::UnexpectedTagClose { 
@@ -327,7 +328,7 @@ fn process_attributes<F>(attributes: Attributes, mut f: F) where F: FnMut(&str, 
                 let value = str::from_utf8(&a.value);
 
                 match (key, value) {
-                    (Ok(k), Ok(v)) => f(k, v),
+                    (Ok(k), Ok(v)) => f(k.trim(), v.trim()),
                     (Err(e), Ok(_)) | (Ok(_), Err(e)) => error!("Error reading attributes: {}", e),
                     (Err(e1), Err(e2)) => error!("Error reading attributes: {}, {}", e1, e2),
                 }

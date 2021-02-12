@@ -17,7 +17,7 @@ pub fn does_file_belong_to_set(file: &str, set: &str) -> bool {
     let file_path = Path::new(file);
     if is_extension_for_file_set(&file_path) {
         if let Some(set_name) = file_path.file_stem() {
-            if set_name.eq(set) {
+            if set_name == set {
                 return true;
             }
         };
