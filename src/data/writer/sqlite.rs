@@ -328,8 +328,11 @@ impl <'d> DBWriter<'d> {
         // We search the database
         let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?;
 
-        let mut rom_name_pair: Vec<GameRomBufferItem> = rom_ids.found.into_iter().map(|rom|{
-            GameRomBufferItem::from_data_file(rom.0, rom.1)
+        let mut rom_name_pair: Vec<GameRomBufferItem> = rom_ids.found.iter().flat_map(|roms_id_pair|{
+            let roms = roms_id_pair.1;
+            roms.iter().map(|rom| {
+                GameRomBufferItem::from_data_file(*roms_id_pair.0, rom.to_owned())
+            }).collect::<Vec<GameRomBufferItem>>()
         }).collect();
 
         // We add in the buffer what is not in the database

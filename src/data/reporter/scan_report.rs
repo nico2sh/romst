@@ -262,15 +262,39 @@ mod tests {
     fn has_complete_set() {
         let mut set = Set::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
-            DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
+            DataFile::new("file1", get_sample_rom("1234")));
 
         set.add_set_rom(RomLocation::new("set1.zip", "file2"),
-            DataFile::new("file2", DataFileInfo::new(FileType::Rom)));
+            DataFile::new("file2", get_sample_rom("5678")));
 
         set.add_set_rom(RomLocation::new("set1.zip", "file3"),
-            DataFile::new("file3", DataFileInfo::new(FileType::Rom)));
+            DataFile::new("file3", get_sample_rom("3456")));
 
         let completeness = set.is_complete();
+        assert_eq!(3, set.roms_available.len());
+        assert_eq!(0, set.roms_missing.len());
+        assert_eq!(0, set.roms_to_spare.len());
+        assert_eq!(0, set.unknown.len());
+        assert_eq!(SetStatus::COMPLETE, completeness);
+    }
+
+    #[test]
+    fn repeated_roms_with_different_names() {
+        let mut set = Set::new("set1");
+        set.add_set_rom(RomLocation::new("set1.zip", "file1"),
+            DataFile::new("file1", get_sample_rom("1234")));
+
+        set.add_set_rom(RomLocation::new("set1.zip", "file2"),
+            DataFile::new("file2", get_sample_rom("1234")));
+
+        set.add_set_rom(RomLocation::new("set1.zip", "file3"),
+            DataFile::new("file3", get_sample_rom("3456")));
+
+        let completeness = set.is_complete();
+        assert_eq!(3, set.roms_available.len());
+        assert_eq!(0, set.roms_missing.len());
+        assert_eq!(0, set.roms_to_spare.len());
+        assert_eq!(0, set.unknown.len());
         assert_eq!(SetStatus::COMPLETE, completeness);
     }
 
@@ -313,13 +337,13 @@ mod tests {
             DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
         set.add_set_rom(RomLocation::new("set1.zip", "file2"),
             DataFile::new("file2", DataFileInfo::new(FileType::Rom)));
-        set.add_missing_rom(DataFile::new("file3", get_sample_rom("8bb3a81b9fa2de5163f0ffc634a998c455bcca25")));
+        set.add_missing_rom(DataFile::new("file3", get_sample_rom("1234")));
 
         let completeness = set.is_complete();
         assert_eq!(SetStatus::INCOMPLETE, completeness);
 
         set.add_set_rom(RomLocation::new("set1.zip", "file3"),
-            DataFile::new("file3", get_sample_rom("8bb3a81b9fa2de5163f0ffc634a998c455bcca25")));
+            DataFile::new("file3", get_sample_rom("1234")));
 
         let completeness = set.is_complete();
         assert_eq!(SetStatus::COMPLETE, completeness);
@@ -329,17 +353,37 @@ mod tests {
     fn has_fixeable_then_complete() {
         let mut set = Set::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
-            DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
+            DataFile::new("file1", get_sample_rom("7890")));
         set.add_set_rom(RomLocation::new("set1.zip", "file2"),
-            DataFile::new("file2", DataFileInfo::new(FileType::Rom)));
+            DataFile::new("file2", get_sample_rom("4567")));
         set.add_set_rom(RomLocation::new("set2.zip", "file3"),
-            DataFile::new("file3", get_sample_rom("8bb3a81b9fa2de5163f0ffc634a998c455bcca25")));
+            DataFile::new("file3", get_sample_rom("1234")));
 
         let completeness = set.is_complete();
         assert_eq!(SetStatus::FIXEABLE, completeness);
 
         set.add_set_rom(RomLocation::new("set1.zip", "file3"),
-            DataFile::new("file3", get_sample_rom("8bb3a81b9fa2de5163f0ffc634a998c455bcca25")));
+            DataFile::new("file3", get_sample_rom("1234")));
+
+        let completeness = set.is_complete();
+        assert_eq!(SetStatus::COMPLETE, completeness);
+    }
+
+    #[test]
+    fn has_missing_then_fixeable_then_complete() {
+        let mut set = Set::new("set1");
+        set.add_set_rom(RomLocation::new("set1.zip", "file1"),
+            DataFile::new("file1", get_sample_rom("7890")));
+        set.add_set_rom(RomLocation::new("set1.zip", "file2"),
+            DataFile::new("file2", get_sample_rom("4567")));
+        set.add_set_rom(RomLocation::new("set2.zip", "file3"),
+            DataFile::new("file3", get_sample_rom("1234")));
+
+        let completeness = set.is_complete();
+        assert_eq!(SetStatus::FIXEABLE, completeness);
+
+        set.add_set_rom(RomLocation::new("set1.zip", "file3"),
+            DataFile::new("file3", get_sample_rom("1234")));
 
         let completeness = set.is_complete();
         assert_eq!(SetStatus::COMPLETE, completeness);
