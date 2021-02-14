@@ -1,6 +1,6 @@
 pub mod scan_report;
 
-use std::path::{Path, PathBuf};
+use std::{ops::Index, path::{Path, PathBuf}};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
 use self::{scan_report::SetReport};
 
@@ -204,6 +204,7 @@ impl<R: DataReader> Reporter<R> {
     }
 
     async fn add_set_report(&mut self, scan_report: &mut ScanReport, file_name: String, file_game_set: GameSet, rom_mode: RomsetMode) -> Result<()> {
+        // We fetch all the sets that can be get from these roms
         let rom_search = self.data_reader.get_romsets_from_roms(file_game_set.roms, rom_mode)?;
 
         scan_report.set_in_file(&file_name);
@@ -212,17 +213,33 @@ impl<R: DataReader> Reporter<R> {
         for entry in &rom_search.set_results {
             let set_name = entry.0;
             let roms = entry.1;
-            // let f = file_name.clone();
 
+            // We fetch all roms for the set we are analyzing
             let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
             roms.get_roms_included().into_iter().for_each(|rom| {
-                let file_name_c = file_name.clone();
-                let rom_name = rom.name.clone();
-                let found_rom = db_roms.iter().position(|set_rom| {
-                    rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false)
+                // We look for coincidences in the database for the roms found for that set
+                let mut found_roms = vec![];
+                db_roms.iter().enumerate().for_each(|(pos, set_rom)| {
+                    if rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false) {
+                        found_roms.push(pos);
+                    }
                 });
+                /*let found_rom = db_roms.iter().position(|set_rom| {
+                    rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false)
+                });*/
 
-                match found_rom {
+                if found_roms.len() == 0 {
+                    warn!("Rom `{}` couldn't be matched for set `{}`", rom, set_name);
+                } else {
+                    for set_rom_pos in found_roms {
+                        let file_name_c = file_name.clone();
+                        let rom_name = rom.name.clone();
+                        let set_rom = db_roms.remove(set_rom_pos);
+                        let location = RomLocation::new(file_name_c, rom_name);
+                        scan_report.add_rom_for_set(set_name.to_owned(), location, set_rom);
+                    }
+                }
+                /*match found_rom {
                     Some(set_rom_pos) => {
                         let set_rom = db_roms.remove(set_rom_pos);
                         let location = RomLocation::new(file_name_c, rom_name);
@@ -231,7 +248,7 @@ impl<R: DataReader> Reporter<R> {
                     None => {
                         warn!("Rom `{}` couldn't be matched for set `{}`", rom, set_name);
                     }
-                }
+                }*/
             });
 
             scan_report.add_missing_roms_for_set(set_name.to_owned(), db_roms);
@@ -390,6 +407,35 @@ mod tests {
         tests::assert_file_report(&report, "game1a.zip", "game1a", 0, 0, 0, 2, 0);
         tests::assert_file_report(&report, "game2.zip", "game2", 3, 0, 0, 0, 0);
         tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0, 0);
+        tests::assert_file_report(&report, "game4.zip", "game4", 4, 0, 0, 0, 0);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_right_data_from_single_file() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+        let data_reader = DBReader::from_connection(&conn);
+
+        let mut reporter = Reporter::new(data_reader);
+        let report_reporter = TestReportReporter::new();
+        let inner = Rc::clone(&report_reporter.inner);
+
+        reporter.add_reporter(report_reporter);
+
+        let game_path = Path::new("testdata").join("single");
+        let report = reporter.check(vec![ game_path ], RomsetMode::Merged).await?;
+
+        assert_eq!(inner.borrow().total_files, 1);
+        assert_eq!(inner.borrow().current_files, 1);
+        assert_eq!(inner.borrow().new_files, 1);
+        assert_eq!(inner.borrow().directories, 0);
+        assert_eq!(inner.borrow().ignored, 0);
+        assert_eq!(inner.borrow().error, 0);
+        assert!(inner.borrow().finished);
+        //let report_sets = &report.files;
+        //assert_eq!(report_sets.len(), 5);
         tests::assert_file_report(&report, "game4.zip", "game4", 4, 0, 0, 0, 0);
 
         Ok(())

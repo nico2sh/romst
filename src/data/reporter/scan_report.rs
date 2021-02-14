@@ -203,7 +203,7 @@ impl SetReport {
                             if location.with_name == rom_name {
                                 entry.insert(RomLocatedAt::InSet);
                             } else {
-                                entry.insert(RomLocatedAt::InSetWrongName(rom_name));
+                                entry.insert(RomLocatedAt::InSetWrongName(location.with_name));
                             }
                         } else {
                             locations.push(location);
@@ -217,7 +217,7 @@ impl SetReport {
                         RomLocatedAt::InSet
                     } else {
                         println!("Putting a wrong name {} for {}", location.with_name, rom_name);
-                        RomLocatedAt::InSetWrongName(rom_name)
+                        RomLocatedAt::InSetWrongName(location.with_name)
                     }
                 } else {
                     RomLocatedAt::InOthers(vec![location])
