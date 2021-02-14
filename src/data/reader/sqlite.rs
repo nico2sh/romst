@@ -147,7 +147,8 @@ impl <'d> DBReader <'d>{
             // We filter the erros
             rows.ok()
         }).flat_map(|rows| {
-            // Since we can have more than one rom id with different name, we create a vec with them
+            // Since we can have more than one rom id with different name, we create a vec with each
+            // Most of the times it will be only one
             let rom_id: u32 = rows.8;
             let datafiles = match rom_ids.get(&rom_id) {
                 Some(datafiles) => { Some(datafiles) }
