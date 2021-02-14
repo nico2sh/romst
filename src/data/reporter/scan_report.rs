@@ -1,13 +1,13 @@
 use std::{collections::{HashMap, HashSet, hash_map::Entry}, fmt::Display};
 
-use crate::{RomsetMode, data::models::{self, file::DataFile}};
+use log::debug;
 
-use super::set_report::SetReport;
+use crate::{RomsetMode, data::models::{self, file::DataFile}};
 
 #[derive(Debug)]
 pub struct ScanReport {
     rom_mode: RomsetMode,
-    pub sets: HashMap<String, Set>,
+    pub sets: HashMap<String, SetReport>,
 }
 
 impl Display for ScanReport {
@@ -25,39 +25,34 @@ impl Display for ScanReport {
 impl ScanReport {
     pub fn new(rom_mode: RomsetMode) -> Self { Self { rom_mode, sets: HashMap::new() } }
 
-    pub fn add_set_report(&mut self, set_report: SetReport, source_file: &String) {
-        let set_name = set_report.name.as_str();
-        let set = self.sets.entry(set_name.to_string()).or_insert(Set::new(set_name));
-        let roms_have = set_report.roms_have;
-        roms_have.into_iter().for_each(|rom| {
-            let rom_name = rom.name.clone();
-            set.add_set_rom(RomLocation::new(source_file.to_owned(), rom_name), rom);
-        });
-        set_report.roms_to_rename.into_iter().for_each(|file_rename| {
-            let rom = DataFile::new(file_rename.to, file_rename.from.info);
-            set.add_set_rom(RomLocation::new(source_file.to_owned(), file_rename.from.name), rom);
-        });
-        set_report.roms_missing.into_iter().for_each(|missing| {
+    pub fn add_rom_for_set<S>(&mut self, set_name: S, location: RomLocation, rom: DataFile) where S: AsRef<str> {
+        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
+        set.add_set_rom(location, rom);
+    }
+
+    pub fn add_missing_roms_for_set<I, S>(&mut self, set_name: S, roms: I) where I: IntoIterator<Item = DataFile>, S: AsRef<str> {
+        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
+        roms.into_iter().for_each(|missing| {
             set.add_missing_rom(missing);
         });
     }
 
-    pub fn set_in_file(&mut self, source_file: &String) {
-        let set_name = models::get_set_from_file(source_file.as_str());
-        self.sets.entry(set_name.clone()).or_insert(Set::new(set_name)).in_file = true;
+    pub fn set_in_file<S>(&mut self, source_file: S) where S: AsRef<str> {
+        let set_name = models::get_set_from_file(source_file.as_ref());
+        self.sets.entry(set_name.clone()).or_insert(SetReport::new(set_name)).in_file = true;
     }
 
-    pub fn add_unknown_files<I>(&mut self, files: I, source_file: String) where I: IntoIterator<Item = DataFile> {
-        let set_name = models::get_set_from_file(source_file.as_str());
-        let set = self.sets.entry(set_name.clone()).or_insert(Set::new(set_name));
+    pub fn add_unknown_files<I, S>(&mut self, files: I, source_file: S) where I: IntoIterator<Item = DataFile>, S: AsRef<str> {
+        let set_name = models::get_set_from_file(source_file.as_ref());
+        let set = self.sets.entry(set_name.clone()).or_insert(SetReport::new(set_name));
         for file in files {
             set.unknown.push(file);
         }
     }
 
-    pub fn add_roms_to_spare<I>(&mut self, files: I, source_file: &String) where I: IntoIterator<Item = DataFile> {
-        let set_name = models::get_set_from_file(source_file.as_str());
-        let set = self.sets.entry(set_name.clone()).or_insert(Set::new(set_name));
+    pub fn add_roms_to_spare<I, S>(&mut self, files: I, source_file: S) where I: IntoIterator<Item = DataFile>, S: AsRef<str> {
+        let set_name = models::get_set_from_file(source_file.as_ref());
+        let set = self.sets.entry(set_name.clone()).or_insert(SetReport::new(set_name));
         files.into_iter().for_each(|rom| {
             set.roms_to_spare.insert(rom);
         });
@@ -65,7 +60,7 @@ impl ScanReport {
 }
 
 #[derive(Debug)]
-pub struct Set {
+pub struct SetReport {
     pub name: String,
     pub in_file: bool,
     pub roms_available: HashMap<DataFile, RomLocatedAt>,
@@ -74,7 +69,7 @@ pub struct Set {
     pub unknown: Vec<DataFile>
 }
 
-impl Display for Set {
+impl Display for SetReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Set Name: {}", self.name)?;
         if self.in_file {
@@ -147,8 +142,8 @@ impl Display for SetStatus {
     }
 }
 
-impl Set {
-    fn new<S>(name: S) -> Self where S: Into<String> {
+impl SetReport {
+    pub fn new<S>(name: S) -> Self where S: Into<String> {
         Self {
             name: name.into(),
             in_file: false,
@@ -179,40 +174,50 @@ impl Set {
         }
     }
 
-    pub fn add_set_rom(&mut self, location: RomLocation, file: DataFile) {
-        let found = self.find_in_missing(&file);
-        if found {
-            self.roms_missing.remove(&file);
+    fn add_set_rom(&mut self, location: RomLocation, rom: DataFile) {
+        if self.roms_missing.remove(&rom) {
+            debug!("Removed from set {} the file as missing {}", self.name, &rom);
         }
 
         let in_set = models::does_file_belong_to_set(location.file.as_str(), self.name.as_str());
-        let file_name = file.name.clone();
-        match self.roms_available.entry(file) {
+        let rom_name = rom.name.clone();
+        match self.roms_available.entry(rom) {
             Entry::Occupied(mut entry) => {
                 match entry.get_mut() {
                     RomLocatedAt::InSet => {
                         // We don't do anything, we already have the file
-                    }
+                    },
                     RomLocatedAt::InSetWrongName(_name) => {
+                        println!("Had with name {}, got it now with name {}", _name, rom_name);
                         if in_set {
-                            entry.insert(RomLocatedAt::InSet);
-                        }
-                    }
-                    RomLocatedAt::InOthers(ref mut locations) => {
-                        if !in_set {
-                            locations.push(location);
+                            if location.with_name == rom_name {
+                                println!("Putting it back to inset {}", rom_name);
+                                entry.insert(RomLocatedAt::InSet);
+                            }
                         } else {
-                            entry.insert(RomLocatedAt::InSet);
+                            // Nothing, it's in another place, we prioritize the same file
+                        }
+                    },
+                    RomLocatedAt::InOthers(ref mut locations) => {
+                        if in_set {
+                            if location.with_name == rom_name {
+                                entry.insert(RomLocatedAt::InSet);
+                            } else {
+                                entry.insert(RomLocatedAt::InSetWrongName(rom_name));
+                            }
+                        } else {
+                            locations.push(location);
                         }
                     }
                 }
             }
             Entry::Vacant(entry) => {
                 let av = if in_set {
-                    if location.with_name.eq(&file_name) {
+                    if location.with_name == rom_name {
                         RomLocatedAt::InSet
                     } else {
-                        RomLocatedAt::InSetWrongName(file_name)
+                        println!("Putting a wrong name {} for {}", location.with_name, rom_name);
+                        RomLocatedAt::InSetWrongName(rom_name)
                     }
                 } else {
                     RomLocatedAt::InOthers(vec![location])
@@ -223,7 +228,7 @@ impl Set {
         }
     }
 
-    pub fn add_missing_rom(&mut self, file: DataFile) {
+    fn add_missing_rom(&mut self, file: DataFile) {
         let found_in_missing = self.find_in_missing(&file);
         let found_available = self.find_in_available(&file);
 
@@ -260,7 +265,7 @@ mod tests {
 
     #[test]
     fn has_complete_set() {
-        let mut set = Set::new("set1");
+        let mut set = SetReport::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
             DataFile::new("file1", get_sample_rom("1234")));
 
@@ -280,7 +285,7 @@ mod tests {
 
     #[test]
     fn repeated_roms_with_different_names() {
-        let mut set = Set::new("set1");
+        let mut set = SetReport::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
             DataFile::new("file1", get_sample_rom("1234")));
 
@@ -300,7 +305,7 @@ mod tests {
 
     #[test]
     fn has_fixeable_set_with_files_from_another_set() {
-        let mut set = Set::new("set1");
+        let mut set = SetReport::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
             DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
 
@@ -316,7 +321,7 @@ mod tests {
 
     #[test]
     fn has_fixeable_set_with_files_to_rename() {
-        let mut set = Set::new("set1");
+        let mut set = SetReport::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
             DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
 
@@ -332,7 +337,7 @@ mod tests {
 
     #[test]
     fn has_incomplete_set_then_complete() {
-        let mut set = Set::new("set1");
+        let mut set = SetReport::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
             DataFile::new("file1", DataFileInfo::new(FileType::Rom)));
         set.add_set_rom(RomLocation::new("set1.zip", "file2"),
@@ -351,7 +356,7 @@ mod tests {
 
     #[test]
     fn has_fixeable_then_complete() {
-        let mut set = Set::new("set1");
+        let mut set = SetReport::new("set1");
         set.add_set_rom(RomLocation::new("set1.zip", "file1"),
             DataFile::new("file1", get_sample_rom("7890")));
         set.add_set_rom(RomLocation::new("set1.zip", "file2"),
@@ -371,20 +376,27 @@ mod tests {
 
     #[test]
     fn has_missing_then_fixeable_then_complete() {
-        let mut set = Set::new("set1");
-        set.add_set_rom(RomLocation::new("set1.zip", "file1"),
-            DataFile::new("file1", get_sample_rom("7890")));
-        set.add_set_rom(RomLocation::new("set1.zip", "file2"),
-            DataFile::new("file2", get_sample_rom("4567")));
-        set.add_set_rom(RomLocation::new("set2.zip", "file3"),
-            DataFile::new("file3", get_sample_rom("1234")));
+        let mut scan_report = ScanReport::new(RomsetMode::Split);
 
-        let completeness = set.is_complete();
-        assert_eq!(SetStatus::FIXEABLE, completeness);
+        // A rom in the right place
+        scan_report.add_rom_for_set("set1", RomLocation::new("set1.zip", "file1"),
+            DataFile::new("file1", get_sample_rom("1234")));
+        // A rom with a different name
+        scan_report.add_rom_for_set("set1", RomLocation::new("set1.zip", "dupfile2"),
+            DataFile::new("dupfile1", get_sample_rom("1234")));
+        // Same rom with the right name
+        scan_report.add_rom_for_set("set1", RomLocation::new("set1.zip", "dupfile1"),
+            DataFile::new("dupfile1", get_sample_rom("1234")));
 
-        set.add_set_rom(RomLocation::new("set1.zip", "file3"),
-            DataFile::new("file3", get_sample_rom("1234")));
+        scan_report.add_rom_for_set("set1", RomLocation::new("set1.zip", "dupfile1"),
+            DataFile::new("dupfile2", get_sample_rom("1234")));
+        // Same rom with the right name
+        scan_report.add_rom_for_set("set1", RomLocation::new("set1.zip", "dupfile2"),
+            DataFile::new("dupfile2", get_sample_rom("1234")));
 
+        println!("{}", scan_report);
+
+        let set = scan_report.sets.get("set1").unwrap();
         let completeness = set.is_complete();
         assert_eq!(SetStatus::COMPLETE, completeness);
     }

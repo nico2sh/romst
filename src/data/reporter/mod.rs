@@ -1,14 +1,14 @@
-pub mod set_report;
 pub mod scan_report;
 
 use std::path::{Path, PathBuf};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
-use self::set_report::{FileRename, SetReport};
+use self::{scan_report::SetReport};
 
 use super::{models::{self, file::DataFile, set::GameSet}, reader::DataReader};
 use anyhow::Result;
 use crossbeam::sync::WaitGroup;
-use scan_report::ScanReport;
+use rusqlite::ToSql;
+use scan_report::{RomLocation, ScanReport};
 use tokio::sync::mpsc::{Receiver, channel};
 use log::{error, warn};
 
@@ -212,12 +212,31 @@ impl<R: DataReader> Reporter<R> {
         for entry in &rom_search.set_results {
             let set_name = entry.0;
             let roms = entry.1;
+            // let f = file_name.clone();
 
-            let set_report = self.compare_roms_with_set(roms.get_roms_included(), set_name.to_owned(), rom_mode)?;
+            let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
+            roms.get_roms_included().into_iter().for_each(|rom| {
+                let file_name_c = file_name.clone();
+                let rom_name = rom.name.clone();
+                let found_rom = db_roms.iter().position(|set_rom| {
+                    rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false)
+                });
 
-            scan_report.add_set_report(set_report, &file_name);
+                match found_rom {
+                    Some(set_rom_pos) => {
+                        let set_rom = db_roms.remove(set_rom_pos);
+                        let location = RomLocation::new(file_name_c, rom_name);
+                        scan_report.add_rom_for_set(set_name.to_owned(), location, set_rom);
+                    }
+                    None => {
+                        warn!("Rom `{}` couldn't be matched for set `{}`", rom, set_name);
+                    }
+                }
+            });
 
-            if models::does_file_belong_to_set(file_name.as_str(), set_name.as_str()) {
+            scan_report.add_missing_roms_for_set(set_name.to_owned(), db_roms);
+
+            if models::does_file_belong_to_set(&file_name, set_name.as_str()) {
                 matched_file_name_with_set = true;
                 scan_report.add_roms_to_spare(rom_search.get_roms_to_spare_for_set(&set_name), &file_name);
             }
@@ -231,39 +250,6 @@ impl<R: DataReader> Reporter<R> {
         scan_report.add_unknown_files(rom_search.unknowns, file_name);
 
         Ok(())
-    }
-
-    fn compare_roms_with_set<'a, I>(&self, roms: I, set_name: String, rom_mode: RomsetMode) -> Result<SetReport> where I: IntoIterator<Item = &'a DataFile> {
-        // we get the roms for that set so we can compare which ones we are missing
-        let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
-        let mut set_report = SetReport::new(set_name.as_str());
-
-        roms.into_iter().for_each(|rom| {
-            let found_rom = db_roms.iter().position(|set_rom| {
-                rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false)
-            });
-
-            match found_rom {
-                Some(set_rom_pos) => {
-                    let set_rom = db_roms.remove(set_rom_pos);
-                    if rom.name == set_rom.name {
-                        set_report.roms_have.push(set_rom);
-                    } else {
-                        let file_rename = FileRename::new(rom.to_owned(), set_rom.name);
-                        set_report.roms_to_rename.push(file_rename);
-                    }
-                }
-                None => {
-                    warn!("Rom `{}` couldn't be matched for set `{}`", rom, set_name);
-                }
-            }
-        });
-
-        set_report.roms_missing = db_roms.into_iter().filter_map(|rom| {
-            Some(rom)
-        }).collect();
-
-        Ok(set_report)
     }
 }
 

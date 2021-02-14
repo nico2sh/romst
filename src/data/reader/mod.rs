@@ -129,6 +129,7 @@ impl FileCheckSearch {
 
 pub trait DataReader {
     fn get_game<S>(&self, game_name: S) -> Option<Game> where S: AsRef<str> + rusqlite::ToSql;
+    /// Returns all the roms for a specific romset
     fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DataFile>> where S: AsRef<str> + rusqlite::ToSql;
     fn get_game_set<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<GameSet> where S: AsRef<str> + rusqlite::ToSql {
         match self.get_game(&game_name) {
