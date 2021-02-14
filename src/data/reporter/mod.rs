@@ -219,9 +219,12 @@ impl<R: DataReader> Reporter<R> {
             roms.get_roms_included().into_iter().for_each(|rom| {
                 // We look for coincidences in the database for the roms found for that set
                 let mut found_roms = vec![];
-                db_roms.iter().enumerate().for_each(|(pos, set_rom)| {
+                db_roms.retain(|set_rom| {
                     if rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false) {
-                        found_roms.push(pos);
+                        found_roms.push(set_rom.to_owned());
+                        false
+                    } else {
+                        true
                     }
                 });
                 /*let found_rom = db_roms.iter().position(|set_rom| {
@@ -231,13 +234,12 @@ impl<R: DataReader> Reporter<R> {
                 if found_roms.len() == 0 {
                     warn!("Rom `{}` couldn't be matched for set `{}`", rom, set_name);
                 } else {
-                    for set_rom_pos in found_roms {
+                    found_roms.into_iter().for_each(|set_rom| {
                         let file_name_c = file_name.clone();
                         let rom_name = rom.name.clone();
-                        let set_rom = db_roms.remove(set_rom_pos);
                         let location = RomLocation::new(file_name_c, rom_name);
                         scan_report.add_rom_for_set(set_name.to_owned(), location, set_rom);
-                    }
+                    });
                 }
                 /*match found_rom {
                     Some(set_rom_pos) => {
