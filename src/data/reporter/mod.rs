@@ -1,16 +1,17 @@
 pub mod scan_report;
 
-use std::{ops::Index, path::{Path, PathBuf}};
-use crate::{RomsetMode, err, error::RomstIOError, filesystem::{FileReader, FileChecks}};
-use self::{scan_report::SetReport};
+use std::path::{Path, PathBuf};
+use crate::{RomsetMode, err, error::RomstIOError, filesystem::FileReader};
 
-use super::{models::{self, file::DataFile, set::GameSet}, reader::DataReader};
+
+use super::{models::{self, set::GameSet}, reader::DataReader};
 use anyhow::Result;
 use crossbeam::sync::WaitGroup;
-use rusqlite::ToSql;
+
 use scan_report::{RomLocation, ScanReport};
 use tokio::sync::mpsc::{Receiver, channel};
-use log::{error, warn};
+use log::error;
+
 
 type RR = Option<Box<dyn ReportReporter>>;
     
@@ -220,18 +221,16 @@ impl<R: DataReader> Reporter<R> {
             roms.get_roms_included().into_iter().for_each(|rom| {
                 // We look for coincidences in the database for the roms found for that set
                 db_roms.iter().for_each(|set_rom| {
-                    if rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false) {
+                    if rom.id == set_rom.id {
                         let file_name_c = file_name.clone();
-                        let rom_name = rom.name.clone();
+                        let rom_name = rom.file.name.clone();
                         let location = RomLocation::new(file_name_c, rom_name);
-                        scan_report.add_rom_for_set(set_name.to_owned(), location, set_rom.to_owned());
+                        scan_report.add_rom_for_set(set_name.to_owned(), location, set_rom.file.to_owned());
                     } else {
-                        scan_report.add_missing_rom_for_set(set_name.to_owned(), set_rom.to_owned());
-                    }
+                        scan_report.add_missing_rom_for_set(set_name.to_owned(), set_rom.file.to_owned());
+                    };
                 });
             });
-
-            scan_report.add_missing_roms_for_set(set_name.to_owned(), db_roms);
 
             if models::does_file_belong_to_set(&file_name, set_name.as_str()) {
                 matched_file_name_with_set = true;
