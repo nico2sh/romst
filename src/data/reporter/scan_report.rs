@@ -76,13 +76,13 @@ pub struct SetReport {
 
 impl Display for SetReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Set Name: {}", self.name)?;
-        if self.in_file {
-            writeln!(f, " [in file]")?;
+        writeln!(f, "Set Name: {}", self.name)?;
+        let file_status = if self.in_file {
+            " [in file]"
         } else {
-            writeln!(f, "")?;
-        }
-        writeln!(f, "Status: {}", self.is_complete())?;
+            ""
+        };
+        writeln!(f, "Status: {}{}", self.is_complete(), file_status)?;
         if self.roms_available.len() > 0 {
             writeln!(f, "Roms Available")?;
             for available in &self.roms_available {
