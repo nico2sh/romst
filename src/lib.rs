@@ -113,7 +113,9 @@ impl Romst {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         for game_name in game_names {
-            let roms = reader.get_romset_roms(&game_name, rom_mode)?;
+            let roms = reader.get_romset_roms(&game_name, rom_mode)?.into_iter().map(|db_rom| {
+                db_rom.file
+            }).collect();
             match reader.get_game(&game_name) {
                 Some(game) => {
                     games.push(GameSet::new(game, roms, vec![], vec![]));
