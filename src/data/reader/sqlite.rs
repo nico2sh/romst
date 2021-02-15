@@ -7,20 +7,20 @@ use rusqlite::{Connection, ToSql, params};
 
 use crate::{RomsetMode, data::models::{file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
 
-use super::{DataReader, FileCheckSearch, RomSearch};
+use super::{DataReader, DbDataFile, FileCheckSearch, RomSearch};
 
 #[derive(Debug)]
 pub struct SearchRomIds {
-    pub found: HashMap<u32, Vec<DataFile>>,
+    pub found: Vec<DbDataFile>,
     pub not_found: Vec<DataFile>,
     pub ignored: Vec<DataFile>
 }
 
 impl SearchRomIds {
-    fn new() -> Self { Self { found: HashMap::new(), not_found: vec![], ignored: vec![] } }
+    fn new() -> Self { Self { found: vec![], not_found: vec![], ignored: vec![] } }
 
     fn add_found(&mut self, id: u32, file: DataFile) {
-        self.found.entry(id).or_insert(vec![]).push(file);
+        self.found.push(DbDataFile::new(id, file));
     }
 
     fn add_not_found(&mut self, rom: DataFile) {
@@ -113,21 +113,21 @@ impl <'d> DBReader <'d>{
         return Ok(db_report);
     }
 
-    fn find_sets_for_roms(&self, rom_ids: HashMap<u32, Vec<DataFile>>, rom_mode: RomsetMode) -> Result<RomSearch> {
+    fn find_sets_for_roms(&self, db_roms: Vec<DbDataFile>, rom_mode: RomsetMode) -> Result<RomSearch> {
         let mut params: Vec<&dyn ToSql> = vec![];
         let mut ids_cond = String::new();
         let mut i = 0;
-        rom_ids.iter().for_each(|rom_id| {
+        db_roms.iter().for_each(|db_rom| {
             if i != 0 {
                 ids_cond.push_str(", ");
             }
             i += 1;                     
             ids_cond.push_str("?");
             ids_cond.push_str(&i.to_string());
-            params.push(rom_id.0);
+            params.push(&db_rom.id);
         });
 
-        // We do a query with all the roms we received, the result will return all sets associateed with these roms
+        // We do a query with all the roms we received, the result will return all sets associated with these roms
         let query = ROMS_QUERY.to_string() + " WHERE game_roms.rom_id IN (" + &ids_cond + ") ORDER BY game_roms.game_name;";
 
         type QueryResult = (String, Option<String>, Option<String>, Option<String>, Option<u32>, Option<String>, Option<String>, Option<String>, u32);
@@ -147,34 +147,30 @@ impl <'d> DBReader <'d>{
             // We filter the erros
             rows.ok()
         }).flat_map(|rows| {
-            // Since we can have more than one rom id with different name, we create a vec with each
+            // Since we can have more than one rom id with different name, we create a vec with each name
             // Most of the times it will be only one
             let rom_id: u32 = rows.8;
-            let datafiles = match rom_ids.get(&rom_id) {
-                Some(datafiles) => { Some(datafiles) }
-                None => { None }
-            };
+            let file_names = db_roms.iter().filter_map(|db_rom| {
+                if rom_id == db_rom.id {
+                    Some(db_rom.file.name.clone())
+                } else {
+                    None
+                }
+            }).collect::<Vec<_>>();
 
-            let dfs = match datafiles {
-                Some(datafiles) => {
-                    datafiles.into_iter().map(|datafile| {
-                        let mut data_file_info = DataFileInfo::new(FileType::Rom);
-                        data_file_info.sha1 = rows.1.to_owned();
-                        data_file_info.md5 = rows.2.to_owned();
-                        data_file_info.crc = rows.3.to_owned();
-                        data_file_info.size = rows.4.to_owned();
-                        let data_file = DataFile::new(&datafile.name, data_file_info);
-                        (rows.0.to_owned(),
-                        data_file,
-                        rows.5.to_owned(),
-                        rows.6.to_owned(),
-                        rows.7.to_owned())
-                    }).collect::<Vec<_>>()
-                }
-                None => {
-                    vec![]
-                }
-            };
+            let dfs = file_names.into_iter().map(|file_name| {
+                let mut data_file_info = DataFileInfo::new(FileType::Rom);
+                data_file_info.sha1 = rows.1.to_owned();
+                data_file_info.md5 = rows.2.to_owned();
+                data_file_info.crc = rows.3.to_owned();
+                data_file_info.size = rows.4.to_owned();
+                let data_file = DataFile::new(file_name, data_file_info);
+                (rows.0.to_owned(),
+                DbDataFile::new(rom_id, data_file),
+                rows.5.to_owned(),
+                rows.6.to_owned(),
+                rows.7.to_owned())
+            }).collect::<Vec<_>>();
             dfs
         }).collect::<Vec<_>>();
 
@@ -315,7 +311,7 @@ impl <'d> DataReader for DBReader<'d> {
         }
     }
 
-    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DataFile>> where S: AsRef<str> + rusqlite::ToSql {
+    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DbDataFile>> where S: AsRef<str> + rusqlite::ToSql {
         let mut query = ROMS_QUERY.to_string();
         match rom_mode {
             RomsetMode::Merged => {
@@ -331,7 +327,7 @@ impl <'d> DataReader for DBReader<'d> {
 
         let mut roms_stmt = self.conn.prepare(&query)?;
         let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
-            Ok(DataFile {
+            let data_file = DataFile {
                 name: row.get(1)?,
                 info: DataFileInfo {
                     file_type: Rom,
@@ -341,18 +337,23 @@ impl <'d> DataReader for DBReader<'d> {
                     size: row.get(5)?,
                 },
                 status: row.get(6)?
-            })
+            };
+            Ok(DbDataFile::new(row.get(10)?, data_file))
         })?.filter_map(|row| row.ok());
 
-        let roms: HashSet<DataFile> = Vec::from_iter(roms_rows).drain(..).collect();
+        let roms: HashSet<DbDataFile> = Vec::from_iter(roms_rows).drain(..).collect();
         Ok(Vec::from_iter(roms))
     }
 
     fn find_rom_usage<S>(&self, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql {
         let game_roms = self.get_romset_roms(game_name, rom_mode)?;
         
-        let roms = game_roms.into_iter().filter(|rom| {
-            rom.name.eq(rom_name.as_ref())
+        let roms = game_roms.into_iter().filter_map(|rom| {
+            if rom.file.name.eq(rom_name.as_ref()) {
+                Some(rom.file)
+            } else {
+                None
+            }
         }).collect();
 
         let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?.found;
@@ -363,9 +364,9 @@ impl <'d> DataReader for DBReader<'d> {
     fn get_romset_shared_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql {
         let game_roms = self.get_romset_roms(game_name, rom_mode)?;
 
-        let rom_ids = DBReader::get_ids_from_files(self.conn, game_roms)?.found;
+        //let rom_ids = DBReader::get_ids_from_files(self.conn, game_roms)?.found;
 
-        self.find_sets_for_roms(rom_ids, rom_mode)
+        self.find_sets_for_roms(game_roms, rom_mode)
     }
 
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch> {
@@ -426,31 +427,31 @@ mod tests {
 
         let data_files = data_reader.get_romset_roms(&"game1".to_string(), RomsetMode::Merged)?;
         assert_eq!(data_files.len(), 6);
-        assert!(data_files.iter().find(|f| { f.name == "rom1.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rom2.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rom3.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rom4.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rom5.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "binfil1.bin".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom1.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom2.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom3.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom4.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom5.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "binfil1.bin".to_string()} ).is_some());
 
         let data_files = data_reader.get_romset_roms(&"game1".to_string(), RomsetMode::NonMerged)?;
         assert_eq!(data_files.len(), 4);
-        assert!(data_files.iter().find(|f| { f.name == "rom1.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rom2.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rom3.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "binfil1.bin".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom1.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom2.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom3.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "binfil1.bin".to_string()} ).is_some());
 
         let data_files = data_reader.get_romset_roms(&"game1a".to_string(), RomsetMode::Split)?;
         assert_eq!(data_files.len(), 2);
-        assert!(data_files.iter().find(|f| { f.name == "rom4.trom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rom5.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom4.trom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rom5.trom".to_string()} ).is_some());
 
         let data_files = data_reader.get_romset_roms(&"game4".to_string(), RomsetMode::Split)?;
         assert_eq!(data_files.len(), 4);
-        assert!(data_files.iter().find(|f| { f.name == "rrham.rom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rhum1.rom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rhum2.rom".to_string()} ).is_some());
-        assert!(data_files.iter().find(|f| { f.name == "rhin1.rom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rrham.rom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rhum1.rom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rhum2.rom".to_string()} ).is_some());
+        assert!(data_files.iter().find(|f| { f.file.name == "rhin1.rom".to_string()} ).is_some());
 
         Ok(())
     }
@@ -479,7 +480,7 @@ mod tests {
 
         let rom_ids = DBReader::get_ids_from_files(&conn, roms)?.found;
 
-        let roms = rom_ids.iter().fold(0, |x, y| x + y.1.len() );
+        let roms = rom_ids.len();
         assert_eq!(4, roms);
 
         let data_reader = DBReader::from_connection(&conn);
@@ -533,7 +534,7 @@ mod tests {
         let not_found = result.not_found;
 
         assert_eq!(rom_ids.len(), 1);
-        assert!(rom_ids.keys().next() == Some(&2));
+        assert!(rom_ids[0].id == 2);
         assert_eq!(not_found.len(), 0);
 
         Ok(())
@@ -554,7 +555,7 @@ mod tests {
         let not_found = result.not_found;
 
         assert!(rom_ids.len() == 1);
-        assert!(rom_ids.keys().next() == Some(&0));
+        assert!(rom_ids[0].id == 0);
         assert!(not_found.len() == 0);
 
         Ok(())
@@ -576,7 +577,7 @@ mod tests {
         let not_found = result.not_found;
 
         assert_eq!(rom_ids.len(), 1);
-        assert!(rom_ids.keys().next() == Some(&5));
+        assert!(rom_ids[0].id == 5);
         assert_eq!(not_found.len(), 0);
 
         Ok(())
