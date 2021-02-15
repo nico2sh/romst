@@ -362,6 +362,7 @@ mod tests {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
         let data_reader = DBReader::from_connection(&conn);
+        // data_reader.print_games()?;
 
         let mut reporter = Reporter::new(data_reader);
         let report_reporter = TestReportReporter::new();

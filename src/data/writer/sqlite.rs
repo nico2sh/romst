@@ -346,7 +346,7 @@ impl <'d> DBWriter<'d> {
         // We remove the duplicates
         rom_name_pair.sort();
         rom_name_pair.dedup();
-        // println!("ROMS {:?}", rom_name_pair);
+
         Ok(rom_name_pair)
     }
 
