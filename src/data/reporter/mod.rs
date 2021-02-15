@@ -215,42 +215,20 @@ impl<R: DataReader> Reporter<R> {
             let roms = entry.1;
 
             // We fetch all roms for the set we are analyzing
-            let mut db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
+            let db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
+
             roms.get_roms_included().into_iter().for_each(|rom| {
                 // We look for coincidences in the database for the roms found for that set
-                let mut found_roms = vec![];
-                db_roms.retain(|set_rom| {
+                db_roms.iter().for_each(|set_rom| {
                     if rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false) {
-                        found_roms.push(set_rom.to_owned());
-                        false
-                    } else {
-                        true
-                    }
-                });
-                /*let found_rom = db_roms.iter().position(|set_rom| {
-                    rom.info.deep_compare(&set_rom.info, FileChecks::ALL).ok().unwrap_or_else(|| false)
-                });*/
-
-                if found_roms.len() == 0 {
-                    warn!("Rom `{}` couldn't be matched for set `{}`", rom, set_name);
-                } else {
-                    found_roms.into_iter().for_each(|set_rom| {
                         let file_name_c = file_name.clone();
                         let rom_name = rom.name.clone();
                         let location = RomLocation::new(file_name_c, rom_name);
-                        scan_report.add_rom_for_set(set_name.to_owned(), location, set_rom);
-                    });
-                }
-                /*match found_rom {
-                    Some(set_rom_pos) => {
-                        let set_rom = db_roms.remove(set_rom_pos);
-                        let location = RomLocation::new(file_name_c, rom_name);
-                        scan_report.add_rom_for_set(set_name.to_owned(), location, set_rom);
+                        scan_report.add_rom_for_set(set_name.to_owned(), location, set_rom.to_owned());
+                    } else {
+                        scan_report.add_missing_rom_for_set(set_name.to_owned(), set_rom.to_owned());
                     }
-                    None => {
-                        warn!("Rom `{}` couldn't be matched for set `{}`", rom, set_name);
-                    }
-                }*/
+                });
             });
 
             scan_report.add_missing_roms_for_set(set_name.to_owned(), db_roms);

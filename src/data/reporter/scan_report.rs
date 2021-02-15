@@ -37,6 +37,11 @@ impl ScanReport {
         });
     }
 
+    pub fn add_missing_rom_for_set<S>(&mut self, set_name: S, rom: DataFile) where S: AsRef<str> {
+        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
+        set.add_missing_rom(rom);
+    }
+
     pub fn set_in_file<S>(&mut self, source_file: S) where S: AsRef<str> {
         let set_name = models::get_set_from_file(source_file.as_ref());
         self.sets.entry(set_name.clone()).or_insert(SetReport::new(set_name)).in_file = true;
