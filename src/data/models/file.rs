@@ -96,7 +96,7 @@ impl DataFile {
     }
 }
 
-#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DataFileInfo {
     pub file_type: FileType,
     pub sha1: Option<String>,
@@ -170,18 +170,9 @@ impl DataFileInfo {
     }
 }
 
-impl Hash for DataFileInfo {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.file_type.hash(state);
-        self.sha1.hash(state);
-        self.md5.hash(state);
-        self.crc.hash(state);
-        self.size.hash(state);
-    }
-}
-
-impl PartialEq for DataFileInfo {
+/*impl PartialEq for DataFileInfo {
     fn eq(&self, other: &Self) -> bool {
+
         // We are good just with the sha1
         if let (Some(self_sha1), Some(other_sha1)) = (self.sha1.as_ref(), other.sha1.as_ref()) {
             return self_sha1.eq(other_sha1);
@@ -201,7 +192,7 @@ impl PartialEq for DataFileInfo {
 
         self.file_type.eq(&other.file_type)
     }
-}
+}*/
 
 impl Ord for DataFileInfo {
     fn cmp(&self, other: &Self) -> Ordering {

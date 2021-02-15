@@ -7,9 +7,26 @@ use super::models::{file::DataFile, game::Game, set::GameSet};
 use anyhow::Result;
 use console::Style;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DbDataFile {
+    pub id: u32,
+    pub file: DataFile,
+}
+
+impl DbDataFile {
+    pub fn new(id: u32, file: DataFile) -> Self { Self { id, file } }
+}
+
+
+impl Display for DbDataFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.id, self.file)
+    }
+}
+
 #[derive(Debug)]
 pub struct RomSearch {
-    searched_roms: HashSet<Rc<DataFile>>,
+    searched_roms: HashSet<Rc<DbDataFile>>,
     pub set_results: HashMap<String, SetContent>,
     pub unknowns: Vec<DataFile>
 }
@@ -18,7 +35,7 @@ impl RomSearch {
     pub fn new() -> Self {
         Self { searched_roms: HashSet::new(), set_results: HashMap::new(), unknowns: vec![] }
     }
-    pub fn add_file_for_set(&mut self, set_name: String, file: DataFile) {
+    pub fn add_file_for_set(&mut self, set_name: String, file: DbDataFile) {
         let set_results = &mut self.set_results;
 
         let f = Rc::new(file);
@@ -30,7 +47,7 @@ impl RomSearch {
         self.unknowns.push(file);
     }
 
-    pub fn get_roms_available_for_set(&self, set: &String) -> Vec<DataFile> {
+    pub fn get_roms_available_for_set(&self, set: &String) -> Vec<DbDataFile> {
         if let Some(set_result) = self.set_results.get(set){
             set_result.roms_included.iter().map(|data_file| {
                 data_file.deref().to_owned()
@@ -46,7 +63,7 @@ impl RomSearch {
                 if set_result.roms_included.contains(rom) {
                     None
                 } else {
-                    Some(rom.deref().clone())
+                    Some(rom.file.clone())
                 }
             }).collect::<Vec<_>>()
         } else {
@@ -57,7 +74,7 @@ impl RomSearch {
     // returns the searched roms
     pub fn get_searched_roms<'a>(&self) -> Vec<DataFile> {
         let a = self.searched_roms.iter().map(|item| {
-            item.deref().to_owned()
+            item.file.to_owned()
         }).collect::<Vec<_>>();
         a
     }
@@ -65,12 +82,13 @@ impl RomSearch {
 
 #[derive(Debug)]
 pub struct SetContent {
-    roms_included: HashSet<Rc<DataFile>>
+    roms_included: HashSet<Rc<DbDataFile>>
 }
 
 impl SetContent {
     fn new() -> Self { Self { roms_included: HashSet::new() } }
-    pub fn get_roms_included(&self) -> Vec<&DataFile> {
+
+    pub fn get_roms_included(&self) -> Vec<&DbDataFile> {
         let a = self.roms_included.iter().map(|data_file| {
             data_file.deref()
         }).collect::<Vec<_>>();
@@ -129,11 +147,14 @@ impl FileCheckSearch {
 
 pub trait DataReader {
     fn get_game<S>(&self, game_name: S) -> Option<Game> where S: AsRef<str> + rusqlite::ToSql;
-    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DataFile>> where S: AsRef<str> + rusqlite::ToSql;
+    /// Returns all the roms for a specific romset
+    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DbDataFile>> where S: AsRef<str> + rusqlite::ToSql;
     fn get_game_set<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<GameSet> where S: AsRef<str> + rusqlite::ToSql {
         match self.get_game(&game_name) {
             Some(game) => {
-                let roms = self.get_romset_roms(game_name, rom_mode)?;
+                let roms = self.get_romset_roms(game_name, rom_mode)?.into_iter().map(|db_rom| {
+                    db_rom.file
+                }).collect();
                 let game_set = GameSet::new(game, roms, vec![], vec![]);
                 Ok(game_set)
             }
@@ -156,7 +177,7 @@ pub trait DataReader {
 
 #[cfg(test)]
 mod tests {
-    use super::{FileCheckSearch, RomSearch};
+    use super::{DbDataFile, FileCheckSearch, RomSearch};
     use crate::{data::models::file::{DataFile, DataFileInfo, FileType}, filesystem::FileChecks};
 
     #[test]
@@ -241,9 +262,9 @@ mod tests {
         rom3.info.crc = Some("fbe0d501".to_string());
 
         let mut rom_search = RomSearch::new();
-        rom_search.add_file_for_set("set1".to_string(), rom1);
-        rom_search.add_file_for_set("set2".to_string(), rom2);
-        rom_search.add_file_for_set("set2".to_string(), rom3);
+        rom_search.add_file_for_set("set1".to_string(), DbDataFile::new(1, rom1));
+        rom_search.add_file_for_set("set2".to_string(), DbDataFile::new(2, rom2));
+        rom_search.add_file_for_set("set2".to_string(), DbDataFile::new(3, rom3));
 
         let available_1 = rom_search.get_roms_available_for_set(&"set1".to_string());
         let spare_1 = rom_search.get_roms_to_spare_for_set(&"set1".to_string());
@@ -252,14 +273,14 @@ mod tests {
 
         assert_eq!(1, available_1.len());
         assert_eq!(2, spare_1.len());
-        assert_eq!(None, available_1[0].info.crc);
+        assert_eq!(None, available_1[0].file.info.crc);
         assert!(spare_1.iter().find(|f| { if let Some(crc) = &f.info.crc { crc.eq(&"dc20b010".to_string()) } else { false } }).is_some());
         assert!(spare_1.iter().find(|f| { if let Some(crc) = &f.info.crc { crc.eq(&"fbe0d501".to_string()) } else { false } }).is_some());
         
         assert_eq!(2, available_2.len());
         assert_eq!(1, spare_2.len());
         assert_eq!(None, spare_2[0].info.crc);
-        assert!(available_2.iter().find(|f| { if let Some(crc) = &f.info.crc { crc.eq(&"dc20b010".to_string()) } else { false } }).is_some());
-        assert!(available_2.iter().find(|f| { if let Some(crc) = &f.info.crc { crc.eq(&"fbe0d501".to_string()) } else { false } }).is_some());
+        assert!(available_2.iter().find(|f| { if let Some(crc) = &f.file.info.crc { crc.eq(&"dc20b010".to_string()) } else { false } }).is_some());
+        assert!(available_2.iter().find(|f| { if let Some(crc) = &f.file.info.crc { crc.eq(&"fbe0d501".to_string()) } else { false } }).is_some());
     }
 }

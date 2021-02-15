@@ -328,8 +328,8 @@ impl <'d> DBWriter<'d> {
         // We search the database
         let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?;
 
-        let mut rom_name_pair: Vec<GameRomBufferItem> = rom_ids.found.into_iter().map(|rom|{
-            GameRomBufferItem::from_data_file(rom.0, rom.1)
+        let mut rom_name_pair: Vec<GameRomBufferItem> = rom_ids.found.into_iter().map(|db_roms|{
+            GameRomBufferItem::from_data_file(db_roms.id, db_roms.file)
         }).collect();
 
         // We add in the buffer what is not in the database
@@ -346,7 +346,7 @@ impl <'d> DBWriter<'d> {
         // We remove the duplicates
         rom_name_pair.sort();
         rom_name_pair.dedup();
-        // println!("ROMS {:?}", rom_name_pair);
+
         Ok(rom_name_pair)
     }
 

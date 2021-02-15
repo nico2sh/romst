@@ -43,7 +43,7 @@ impl FileReader {
                 str_name.to_str().unwrap_or_default()
             }
             None => { "" }
-        };
+        }.trim();
 
         let game = Game::new(game_name.to_string());
 
@@ -76,7 +76,7 @@ impl FileReader {
                     } else { None };
 
                     let rom = DataFile {
-                        name: f.name().to_string(),
+                        name: f.name().trim().to_string(),
                         info: DataFileInfo {
                             file_type: FileType::Rom,
                             sha1,
