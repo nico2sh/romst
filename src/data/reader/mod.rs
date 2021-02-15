@@ -87,6 +87,7 @@ pub struct SetContent {
 
 impl SetContent {
     fn new() -> Self { Self { roms_included: HashSet::new() } }
+
     pub fn get_roms_included(&self) -> Vec<&DbDataFile> {
         let a = self.roms_included.iter().map(|data_file| {
             data_file.deref()

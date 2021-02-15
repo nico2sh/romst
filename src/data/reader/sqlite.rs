@@ -5,7 +5,7 @@ use console::Style;
 use log::{debug, error, warn};
 use rusqlite::{Connection, ToSql, params};
 
-use crate::{RomsetMode, data::models::{file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
+use crate::{RomsetMode, data::models::{file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}, err};
 
 use super::{DataReader, DbDataFile, FileCheckSearch, RomSearch};
 
@@ -111,6 +111,29 @@ impl <'d> DBReader <'d>{
         db_report.device_refs = device_refs;
 
         return Ok(db_report);
+    }
+
+    pub fn print_games(&self) -> Result<()>{
+        let mut stmt = self.conn.prepare("SELECT games.name, game_roms.name, game_roms.rom_id, roms.sha1 FROM games JOIN game_roms ON games.name = game_roms.game_name JOIN roms ON roms.id = game_roms.rom_id ORDER BY games.name, game_roms.name;")?;
+        let g = stmt.query_map(params![], |row| {
+            let name: String = row.get(0)?;
+            let file: String = row.get(1)?;
+            let id: u32 = row.get(2)?;
+            let sha1: Option<String> = row.get(3)?;
+
+            Ok((name, file, sha1, id))
+        })?.filter_map(|row| {
+            match row {
+                Ok(r) => {
+                    Some(r)
+                }
+                Err(err) => {
+                    None
+                }
+            }
+        }).collect::<Vec<_>>();
+
+        Ok(())
     }
 
     fn find_sets_for_roms(&self, db_roms: Vec<DbDataFile>, rom_mode: RomsetMode) -> Result<RomSearch> {

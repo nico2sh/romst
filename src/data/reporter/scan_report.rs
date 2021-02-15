@@ -193,10 +193,8 @@ impl SetReport {
                         // We don't do anything, we already have the file
                     },
                     RomLocatedAt::InSetWrongName(_name) => {
-                        println!("Had with name {}, got it now with name {}", _name, rom_name);
                         if in_set {
                             if location.with_name == rom_name {
-                                println!("Putting it back to inset {}", rom_name);
                                 entry.insert(RomLocatedAt::InSet);
                             }
                         } else {
@@ -221,7 +219,6 @@ impl SetReport {
                     if location.with_name == rom_name {
                         RomLocatedAt::InSet
                     } else {
-                        println!("Putting a wrong name {} for {}", location.with_name, rom_name);
                         RomLocatedAt::InSetWrongName(location.with_name)
                     }
                 } else {
