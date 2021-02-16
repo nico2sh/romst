@@ -27,19 +27,40 @@ impl ScanReport {
 
     pub fn add_rom_for_set<S>(&mut self, set_name: S, location: RomLocation, rom: DataFile) where S: AsRef<str> {
         let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
-        set.add_set_rom(location, rom);
+        match &rom.status {
+            Some(status) if status.to_lowercase() == "nodump" => {
+                set.roms_unneeded.insert(rom);
+            }
+            _ => {
+                set.add_set_rom(location, rom);
+            }
+        }
     }
 
     pub fn add_missing_roms_for_set<I, S>(&mut self, set_name: S, roms: I) where I: IntoIterator<Item = DataFile>, S: AsRef<str> {
         let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
-        roms.into_iter().for_each(|missing| {
-            set.add_missing_rom(missing);
+        roms.into_iter().for_each(|rom| {
+            match &rom.status {
+                Some(status) if status.to_lowercase() == "nodump" => {
+                    set.roms_unneeded.insert(rom);
+                }
+                _ => {
+                    set.add_missing_rom(rom);
+                }
+            }
         });
     }
 
     pub fn add_missing_rom_for_set<S>(&mut self, set_name: S, rom: DataFile) where S: AsRef<str> {
         let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
-        set.add_missing_rom(rom);
+        match &rom.status {
+            Some(status) if status.to_lowercase() == "nodump" => {
+                set.roms_unneeded.insert(rom);
+            }
+            _ => {
+                set.add_missing_rom(rom);
+            }
+        }
     }
 
     pub fn set_in_file<S>(&mut self, source_file: S) where S: AsRef<str> {
@@ -70,6 +91,7 @@ pub struct SetReport {
     pub in_file: bool,
     pub roms_available: HashMap<DataFile, RomLocatedAt>,
     pub roms_missing: HashSet<DataFile>,
+    pub roms_unneeded: HashSet<DataFile>, // BadDumps
     pub roms_to_spare: HashSet<DataFile>,
     pub unknown: Vec<DataFile>
 }
@@ -99,6 +121,12 @@ impl Display for SetReport {
                         writeln!(f, " - {} [located at: {}]", rom.name, location_list.join(", "))?; 
                     }
                 }
+            }
+        }
+        if self.roms_unneeded.len() > 0 {
+            writeln!(f, "Roms Unneeded (e.g. Bad Dumps)")?;
+            for unneeded in &self.roms_unneeded {
+                writeln!(f, " - {}", unneeded.name)?;
             }
         }
         if self.roms_missing.len() > 0 {
@@ -154,6 +182,7 @@ impl SetReport {
             in_file: false,
             roms_available: HashMap::new(),
             roms_missing: HashSet::new(),
+            roms_unneeded: HashSet::new(),
             roms_to_spare: HashSet::new(),
             unknown: vec![]
         }
@@ -231,11 +260,18 @@ impl SetReport {
     }
 
     fn add_missing_rom(&mut self, file: DataFile) {
-        let found_in_missing = self.find_in_missing(&file);
-        let found_available = self.find_in_available(&file);
+        match &file.status {
+            Some(status) if status.to_lowercase() == "nodump" => {
+                self.roms_unneeded.insert(file);
+            }
+            _ => {
+                let found_in_missing = self.find_in_missing(&file);
+                let found_available = self.find_in_available(&file);
 
-        if !found_available && !found_in_missing {
-            self.roms_missing.insert(file);
+                if !found_available && !found_in_missing {
+                    self.roms_missing.insert(file);
+                }
+            }
         }
     }
 

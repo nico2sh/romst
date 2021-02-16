@@ -322,7 +322,7 @@ mod tests {
         }
     }
 
-    fn assert_file_report(report: &ScanReport, file_name: &str, set_name: &str, roms_have: usize, roms_missing: usize, roms_to_rename: usize, roms_unneeded: usize, roms_unknown: usize) {
+    fn assert_file_report(report: &ScanReport, file_name: &str, set_name: &str, roms_have: usize, roms_missing: usize, roms_to_rename: usize, roms_unneeded: usize, roms_to_spare: usize, roms_unknown: usize) {
         let report_sets = &report.sets;
         let assert_result = report_sets.iter().filter(|set_report| {
             let set = set_report.1;
@@ -342,7 +342,8 @@ mod tests {
                 }
             });
             set.name == set_name &&
-            set.roms_to_spare.len() == roms_unneeded &&
+            set.roms_unneeded.len() == roms_unneeded &&
+            set.roms_to_spare.len() == roms_to_spare &&
             have == roms_have &&
             rename == roms_to_rename &&
             set.unknown.len() == roms_unknown &&
@@ -373,21 +374,21 @@ mod tests {
         let game_path = Path::new("testdata").join("split");
         let report = reporter.check(vec![ game_path ], RomsetMode::Merged).await?;
 
-        assert_eq!(inner.borrow().total_files, 6);
-        assert_eq!(inner.borrow().current_files, 6);
-        assert_eq!(inner.borrow().new_files, 6);
+        assert_eq!(inner.borrow().total_files, 7);
+        assert_eq!(inner.borrow().current_files, 7);
+        assert_eq!(inner.borrow().new_files, 7);
         assert_eq!(inner.borrow().directories, 0);
         assert_eq!(inner.borrow().ignored, 0);
         assert_eq!(inner.borrow().error, 0);
         assert!(inner.borrow().finished);
-        //let report_sets = &report.files;
-        //assert_eq!(report_sets.len(), 5);
-        tests::assert_file_report(&report, "device1.zip", "device1", 1, 0, 0, 0, 0);
-        tests::assert_file_report(&report, "game1.zip", "game1", 4, 0, 2, 0, 0);
-        tests::assert_file_report(&report, "game1a.zip", "game1a", 0, 0, 0, 2, 0);
-        tests::assert_file_report(&report, "game2.zip", "game2", 3, 0, 0, 0, 0);
-        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0, 0);
-        tests::assert_file_report(&report, "game4.zip", "game4", 4, 0, 0, 0, 0);
+        assert_eq!(report.sets.len(), 7);
+        tests::assert_file_report(&report, "device1.zip", "device1", 1, 0, 0, 0, 0, 0);
+        tests::assert_file_report(&report, "game1.zip", "game1", 4, 0, 2, 0, 0, 0);
+        tests::assert_file_report(&report, "game1a.zip", "game1a", 0, 0, 0, 0, 2, 0);
+        tests::assert_file_report(&report, "game2.zip", "game2", 3, 0, 0, 1, 0, 0);
+        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0, 0, 0);
+        tests::assert_file_report(&report, "game4.zip", "game4", 4, 0, 0, 0,0, 0);
+        tests::assert_file_report(&report, "game5.zip", "game5", 3, 0, 0, 0, 0, 0);
 
         Ok(())
     }
@@ -414,9 +415,8 @@ mod tests {
         assert_eq!(inner.borrow().ignored, 0);
         assert_eq!(inner.borrow().error, 0);
         assert!(inner.borrow().finished);
-        //let report_sets = &report.files;
-        //assert_eq!(report_sets.len(), 5);
-        tests::assert_file_report(&report, "game4.zip", "game4", 4, 0, 0, 0, 0);
+        assert_eq!(report.sets.len(), 1);
+        tests::assert_file_report(&report, "game4.zip", "game4", 4, 0, 0, 0, 0, 0);
 
         Ok(())
     }
@@ -443,11 +443,10 @@ mod tests {
         assert_eq!(inner.borrow().ignored, 1);
         assert_eq!(inner.borrow().error, 0);
         assert!(inner.borrow().finished);
-        //let report_sets = &report.files;
-        //assert_eq!(report_sets.len(), 3);
-        tests::assert_file_report(&report, "game1.zip", "game1", 3, 1, 0, 0, 0);
-        tests::assert_file_report(&report, "game2.zip", "game2", 2, 0, 1, 0, 0);
-        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0, 1);
+        assert_eq!(report.sets.len(), 3);
+        tests::assert_file_report(&report, "game1.zip", "game1", 3, 1, 0, 0, 0, 0);
+        tests::assert_file_report(&report, "game2.zip", "game2", 2, 0, 1, 1, 0, 0);
+        tests::assert_file_report(&report, "game3.zip", "game3", 3, 0, 0, 0, 0, 1);
 
         Ok(())
     }
