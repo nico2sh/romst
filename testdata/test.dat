@@ -70,6 +70,7 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<rom name="binary1.bin" size="4096" crc="4130fc82" sha1="10c6724aaea8d972e1bfd4e914c44bf6cc1573a3"/>
 		<rom name="binary2.bin" size="4096" crc="193cec3c" sha1="6ece14211f80786ab70909581f4cd77be9379a5c"/>
 		<rom name="binary3.bin" size="4096" crc="a1bc3e50" sha1="901fba08a51ec46b3858c4a802b9c96ba826122f"/>
+		<rom name="romout.rom" size="2048" status="nodump"/>
 	</machine>
 	<machine name="game3" sampleof"samplos3">
 		<description>Game 3 with samples</description>
@@ -90,6 +91,14 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<rom name="rhum1.rom" size="2048" crc="4bec6e65" SHA1="0d0410009c5bd3802b0021c8f29edc997a83c88c" />
 		<rom name="rhum2.rom" size="2048" crc="4bec6e65" SHA1="0d0410009c5bd3802b0021c8f29edc997a83c88c" />
 		<rom name="rhin1.rom" size="2048" crc="0d46fa2d" SHA1="5bef439d1d775e0ff3a17189478e87b3dd5d0e49" />
+	</machine>
+	<machine name="game5">
+		<description>Game 5 with crc with trailing zeroes</description>
+		<year>1984</year>
+		<manufacturer>Lagos</manufacturer>
+		<rom name="trailing.b" size="2048" crc="0c8f1eb3" SHA1="edaed032762ebc5e07bf3dec8a0d278120f31910" />
+		<rom name="some_0.b" size="2048" crc="05ec55ed" SHA1="86bbfdd134898f45bbb6e53954d050f61c077d1b" />
+		<rom name="more_0.b" size="512" crc="00fef32d" SHA1="748c336a68bcaec48a0c6410533e3c33c9f50b4f" />
 	</machine>
 </datafile>
 
