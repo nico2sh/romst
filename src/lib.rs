@@ -61,16 +61,16 @@ pub struct Romst {
 }
 
 impl Romst {
-    fn get_rw_connection(db_file: String) -> Result<Connection>{
-        let db_path = Path::new(&db_file);
+    fn get_rw_connection<S>(db_file: S) -> Result<Connection> where S: AsRef<str>{
+        let db_path = Path::new(db_file.as_ref());
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
         Ok(conn)
     }
 
-    fn get_r_connection(db_file: String) -> Result<Connection>{
-        let db_path = Path::new(&db_file);
+    fn get_r_connection<S>(db_file: S) -> Result<Connection> where S: AsRef<str> {
+        let db_path = Path::new(db_file.as_ref());
         if !db_path.exists() {
-            return Err(anyhow!("No Database found at `{}`", db_file));
+            return Err(anyhow!("No Database found at `{}`", db_file.as_ref()));
         }
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         Ok(conn)
@@ -84,18 +84,18 @@ impl Romst {
         Ok(DBWriter::from_connection(conn, 500))
     }
 
-    pub fn import_dat<R>(input: String, output_file: String, overwrite: bool, reporter: Option<R>) -> Result<()> where R: DatImporterReporter + 'static {
-        println!("Loading file: {}", Style::new().bold().apply_to(&input));
-        println!("Output: {}", Style::new().bold().apply_to(&output_file));
+    pub fn import_dat<R, S>(input: S, output_file: S, overwrite: bool, reporter: Option<R>) -> Result<()> where R: DatImporterReporter + 'static, S: AsRef<str> {
+        println!("Loading file: {}", Style::new().bold().apply_to(input.as_ref()));
+        println!("Output: {}", Style::new().bold().apply_to(output_file.as_ref()));
 
-        let db_path = Path::new(&output_file);
+        let db_path = Path::new(output_file.as_ref());
         if !overwrite && db_path.exists() {
-            return Err(anyhow!("Destination file `{}` already exists, choose another output or rename the file.", output_file));
+            return Err(anyhow!("Destination file `{}` already exists, choose another output or rename the file.", output_file.as_ref()));
         }
 
         let mut conn = Romst::get_rw_connection(output_file)?;
         let db_writer = DBWriter::from_connection(&mut conn, DEFAULT_WRITE_BUFFER_SIZE);
-        let mut dat_importer = DatImporter::from_path(&input, db_writer)?;
+        let mut dat_importer = DatImporter::from_path(&input.as_ref().to_string(), db_writer)?;
         if let Some(r) = reporter {
             dat_importer.set_reporter(r);
         }
@@ -108,20 +108,20 @@ impl Romst {
         Ok(())
     }
 
-    pub fn get_set_info(db_file: String, game_names: Vec<String>, rom_mode: RomsetMode) -> Result<Vec<GameSet>> {
+    pub fn get_set_info<S>(db_file: S, game_names: Vec<S>, rom_mode: RomsetMode) -> Result<Vec<GameSet>> where S: AsRef<str> {
         let mut games =  vec![];
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         for game_name in game_names {
-            let roms = reader.get_romset_roms(&game_name, rom_mode)?.into_iter().map(|db_rom| {
+            let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.into_iter().map(|db_rom| {
                 db_rom.file
             }).collect();
-            match reader.get_game(&game_name) {
+            match reader.get_game(game_name.as_ref()) {
                 Some(game) => {
                     games.push(GameSet::new(game, roms, vec![], vec![]));
                 }
                 None => {
-                    error!("Game {} not found", game_name)
+                    error!("Game {} not found", game_name.as_ref())
                 }
             }
         }
@@ -129,19 +129,19 @@ impl Romst {
         Ok(games)
     }
 
-    pub fn get_rom_usage(db_file: String, game_name: String, rom_name: String, rom_mode: RomsetMode) -> Result<RomSearch> {
+    pub fn get_rom_usage<S>(db_file: S, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
-        reader.find_rom_usage(&game_name, &rom_name, rom_mode)
+        reader.find_rom_usage(game_name.as_ref(), rom_name.as_ref(), rom_mode)
     }
 
-    pub fn get_romset_usage(db_file: String, game_name: String, rom_mode: RomsetMode) -> Result<RomSearch> {
+    pub fn get_romset_usage<S>(db_file: S, game_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
-        reader.get_romset_shared_roms(&game_name, rom_mode)
+        reader.get_romset_shared_roms(game_name.as_ref(), rom_mode)
     }
 
-    pub fn get_db_info(db_file: String) -> Result<DBReport> {
+    pub fn get_db_info<S>(db_file: S) -> Result<DBReport> where S: AsRef<str>{
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.get_stats()
