@@ -5,26 +5,26 @@ use console::Style;
 use log::{debug, error, warn};
 use rusqlite::{Connection, ToSql, params};
 
-use crate::{RomsetMode, data::models::{file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
+use crate::{RomsetMode, data::models::{disk::GameDisk, file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
 
-use super::{DataReader, DbDataFile, FileCheckSearch, RomSearch};
+use super::{DataReader, DbDataEntry, FileCheckSearch, RomSearch};
 
 #[derive(Debug)]
-pub struct SearchRomIds {
-    pub found: Vec<DbDataFile>,
-    pub not_found: Vec<DataFile>,
-    pub ignored: Vec<DataFile>
+pub struct SearchEntryIds<T> {
+    pub found: Vec<DbDataEntry<T>>,
+    pub not_found: Vec<T>,
+    pub ignored: Vec<T>
 }
 
-impl SearchRomIds {
+impl <T> SearchEntryIds<T> {
     fn new() -> Self { Self { found: vec![], not_found: vec![], ignored: vec![] } }
 
-    fn add_found(&mut self, id: u32, file: DataFile) {
-        self.found.push(DbDataFile::new(id, file));
+    fn add_found(&mut self, id: u32, file: T) {
+        self.found.push(DbDataEntry::new(id, file));
     }
 
-    fn add_not_found(&mut self, rom: DataFile) {
-        self.not_found.push(rom);
+    fn add_not_found(&mut self, entry: T) {
+        self.not_found.push(entry);
     }
 }
 
@@ -113,7 +113,7 @@ impl <'d> DBReader <'d>{
         return Ok(db_report);
     }
 
-    fn find_sets_for_roms(&self, db_roms: Vec<DbDataFile>, rom_mode: RomsetMode) -> Result<RomSearch> {
+    fn find_sets_for_roms(&self, db_roms: Vec<DbDataEntry<DataFile>>, rom_mode: RomsetMode) -> Result<RomSearch> {
         let mut params: Vec<&dyn ToSql> = vec![];
         let mut ids_cond = String::new();
         let mut i = 0;
@@ -166,7 +166,7 @@ impl <'d> DBReader <'d>{
                 data_file_info.size = rows.4.to_owned();
                 let data_file = DataFile::new(file_name, data_file_info);
                 (rows.0.to_owned(),
-                DbDataFile::new(rom_id, data_file),
+                DbDataEntry::new(rom_id, data_file),
                 rows.5.to_owned(),
                 rows.6.to_owned(),
                 rows.7.to_owned())
@@ -204,8 +204,8 @@ impl <'d> DBReader <'d>{
         Ok(result)
     }
 
-    pub fn get_ids_from_files(conn: &Connection, files: Vec<DataFile>) -> Result<SearchRomIds> {
-        let mut result = SearchRomIds::new();
+    pub fn get_ids_from_files(conn: &Connection, files: Vec<DataFile>) -> Result<SearchEntryIds<DataFile>> {
+        let mut result = SearchEntryIds::new();
         for rom_file in files {
             let rom = &rom_file.info;
 
@@ -276,6 +276,63 @@ impl <'d> DBReader <'d>{
         
         Ok(result)
     }
+
+    pub fn get_ids_from_disks(conn: &Connection, files: Vec<GameDisk>) -> Result<SearchEntryIds<GameDisk>> {
+        let mut result = SearchEntryIds::new();
+        for file in files {
+            match &file.status {
+                Some(status) if status.to_lowercase() == "nodump" => {
+                    // We ignore the ones without dump
+                    result.ignored.push(file);
+                },
+                _ => {
+                    let mut params: Vec<(&str, &dyn ToSql)> = vec![];
+                    let mut statement_where = vec![];
+                    let mut has_hash = false;
+
+                    if let Some(ref sha1) = file.sha1 {
+                        has_hash = true;
+                        params.push((":sha1", sha1));
+                        statement_where.push("(sha1 = :sha1 OR sha1 IS NULL)");
+                    }
+
+                    if !has_hash {
+                        warn!("File `{}` has no hash value, it could match any other rom, should be ignored", file);
+                        result.not_found.push(file);
+                    } else {
+                        // Minimum fields to find, has to have at least md5 or sha1
+                        statement_where.push("(sha1 IS NOT NULL)");
+
+                        let statement = "SELECT id FROM disks WHERE ".to_string() +
+                            &statement_where.join(" AND ") + ";";
+                        
+                        let mut rom_stmt = conn.prepare_cached(&statement)?;
+                        let query_rom_result: Vec<u32> = rom_stmt.query_map_named(params.as_slice(), |row| {
+                            Ok(row.get(0)?)
+                        })?.filter_map(|row| row.ok() ).collect();
+
+                        match query_rom_result.len() {
+                            0 => {
+                                debug!("No disk found in DB: {}", file);
+                                result.add_not_found(file);
+                            },
+                            1 => {
+                                debug!("Found disk in DB: {}", file);
+                                result.add_found(query_rom_result[0], file);
+                            },
+                            n => {
+                                // TODO: There is a corner case which is, if the search has a sha1, and the DB has a md5 it may match as both with match against the null value
+                                warn!("Found more than one rom ({}) on the query, ROM: {}", n, file);
+                                result.ignored.push(file);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(result)
+    }
 }
 
 impl <'d> DataReader for DBReader<'d> {
@@ -311,7 +368,7 @@ impl <'d> DataReader for DBReader<'d> {
         }
     }
 
-    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DbDataFile>> where S: AsRef<str> + rusqlite::ToSql {
+    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DbDataEntry<DataFile>>> where S: AsRef<str> + rusqlite::ToSql {
         let mut query = ROMS_QUERY.to_string();
         match rom_mode {
             RomsetMode::Merged => {
@@ -338,10 +395,10 @@ impl <'d> DataReader for DBReader<'d> {
                 },
                 status: row.get(6)?
             };
-            Ok(DbDataFile::new(row.get(10)?, data_file))
+            Ok(DbDataEntry::new(row.get(10)?, data_file))
         })?.filter_map(|row| row.ok());
 
-        let roms: HashSet<DbDataFile> = Vec::from_iter(roms_rows).drain(..).collect();
+        let roms: HashSet<DbDataEntry<DataFile>> = Vec::from_iter(roms_rows).drain(..).collect();
         Ok(Vec::from_iter(roms))
     }
 

@@ -5,7 +5,7 @@ use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
 use crate::{data::writer::*, err, error::RomstError};
 
-use super::models::{file::DataFile, file::{DataFileInfo, FileType}, game::Game};
+use super::models::{disk::GameDisk, file::DataFile, file::{DataFileInfo, FileType}, game::Game};
 
 pub struct DatImporter<R: BufRead, W: DataWriter> {
     reader: Reader<R>,
@@ -284,7 +284,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
                                 }
                             },
                             "disk" => {
-                                let disk = file_from_attributes(FileType::Disk, e.attributes())?;
+                                let disk = disk_from_attributes(e.attributes())?;
                                 disks.push(disk);
                             },
                             "device_ref" => {
@@ -378,6 +378,34 @@ fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<D
     }
 }
 
+fn disk_from_attributes(attributes: Attributes) -> Result<GameDisk> {
+    let mut disk_name = None;
+    let mut sha1 = None;
+    let mut region = None;
+    let mut status = None;
+
+    process_attributes(attributes, |key, value| {
+        match key.to_lowercase().as_str() {
+            "name" => disk_name = Some(value.to_string()),
+            "sha1" => sha1 = Some(String::from(value)),
+            "region" => region = Some(String::from(value)),
+            "status" => status = Some(String::from(value).to_lowercase()),
+            k => debug!("Unknown atribute parsing: {}", k),
+        }
+    });
+
+    if let Some(name) = disk_name {
+        let mut disk = GameDisk::new(name);
+        disk.sha1 = sha1;
+        disk.region = region;
+        disk.status = status;
+        Ok(disk)
+    } else {
+        error!("Found disk without name, not adding");
+        err!(RomstError::ParsingError { message: "Disk without name".to_string() })
+    }
+}
+
 fn game_from_attributes(attributes: Attributes) -> Result<Game> {
     let mut game = Game::new(String::from(""));
 
@@ -429,7 +457,7 @@ mod tests {
             Ok(())
         }
 
-        fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
+        fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<GameDisk>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
             self.games.borrow_mut().push(game.name);
 
             Ok(())
