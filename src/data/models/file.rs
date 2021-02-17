@@ -10,7 +10,6 @@ use crate::{error::RomstError, err, filesystem};
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FileType {
     Rom,
-    Disk,
     Sample
 }
 
@@ -18,7 +17,6 @@ impl Display for FileType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             FileType::Rom => write!(f, "ROM"),
-            FileType::Disk => write!(f, "Disk"),
             FileType::Sample => write!(f, "Sample"),
         }
     }
