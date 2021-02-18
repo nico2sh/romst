@@ -4,7 +4,7 @@ use anyhow::Result;
 use log::{debug, error};
 use rusqlite::{Connection, params};
 
-use crate::{data::{models::{disk::GameDisk, file::{DataFile, DataFileInfo}, game::Game}, reader::sqlite::DBReader}};
+use crate::{data::{models::{disk::{GameDisk, GameDiskInfo}, file::{DataFile, DataFileInfo}, game::Game}, reader::sqlite::DBReader}};
 use super::DataWriter;
 
 #[derive(Debug)]
@@ -44,7 +44,7 @@ struct Buffer {
     game_roms: HashMap<String, Vec<GameFileBufferItem>>,
     samples: HashMap<String, HashSet<String>>,
     device_refs: HashMap<String, HashSet<String>>,
-    disks: HashMap<GameDisk, u32>,
+    disks: HashMap<GameDiskInfo, u32>,
     game_disks: HashMap<String, Vec<GameFileBufferItem>>,
 }
 
@@ -60,7 +60,7 @@ impl GameFileBufferItem {
         Self { name: data_file.name, id: rom_id, status: data_file.status } 
     }
     fn from_disk_file(disk_id: u32, disk_file: GameDisk) -> Self {
-        Self { name: disk_file.name, id: disk_id, status: disk_file.status }
+        Self { name: disk_file.name, id: disk_id, status: disk_file.info.status }
     }
 }
 
@@ -115,13 +115,13 @@ impl Buffer {
     fn add_disks(&mut self, disks: Vec<GameDisk>) -> Vec<(u32, GameDisk)> {
         let mut disk_ids = vec![];
         disks.into_iter().for_each(|disk| {
-            match self.disks.get(&disk) {
+            match self.disks.get(&disk.info) {
                 Some(disk_id) => {
                     disk_ids.push((*disk_id, disk));
                 }
                 None => {
                     let id = self.ids.get_next_disk();
-                    self.disks.insert(disk.clone(), id);
+                    self.disks.insert(disk.info.clone(), id);
                     disk_ids.push((id, disk));
                 }
             }
@@ -473,8 +473,8 @@ impl <'d> DBWriter<'d> {
                 "INSERT INTO disks (id, sha1, region, status) VALUES (?1, ?2, ?3, ?4);",
                 params![disk_id, disk.sha1, disk.region, disk.status]);
                 match result {
-                    Ok(_) => { debug!("Inserted disk `{}` with id `{}`", disk.name, disk_id); }
-                    Err(e) => { error!("Error inserting disk `{}`: {}", disk.name, e); }
+                    Ok(_) => { debug!("Inserted disk `{}` with id `{}`", disk, disk_id); }
+                    Err(e) => { error!("Error inserting disk `{}`: {}", disk, e); }
                 }
         }
 

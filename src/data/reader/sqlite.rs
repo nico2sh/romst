@@ -280,7 +280,7 @@ impl <'d> DBReader <'d>{
     pub fn get_ids_from_disks(conn: &Connection, files: Vec<GameDisk>) -> Result<SearchEntryIds<GameDisk>> {
         let mut result = SearchEntryIds::new();
         for file in files {
-            match &file.status {
+            match &file.info.status {
                 Some(status) if status.to_lowercase() == "nodump" => {
                     // We ignore the ones without dump
                     result.ignored.push(file);
@@ -290,7 +290,7 @@ impl <'d> DBReader <'d>{
                     let mut statement_where = vec![];
                     let mut has_hash = false;
 
-                    if let Some(ref sha1) = file.sha1 {
+                    if let Some(ref sha1) = file.info.sha1 {
                         has_hash = true;
                         params.push((":sha1", sha1));
                         statement_where.push("(sha1 = :sha1 OR sha1 IS NULL)");
@@ -464,7 +464,7 @@ impl <'d> DataReader for DBReader<'d> {
 mod tests {
     use std::{io::BufReader, fs::File, path::Path};
     use rusqlite::{Connection, OpenFlags};
-    use crate::data::{importer::DatImporter, reader::sqlite::DBReader, models::file::FileType, writer::{sqlite::DBWriter}};
+    use crate::data::{importer::DatImporter, models::{disk::GameDiskInfo, file::FileType}, reader::sqlite::DBReader, writer::{sqlite::DBWriter}};
     use super::*;
 
     fn get_db_connection<'a, 'b>(dat_path: &'b impl AsRef<Path>) -> Result<Connection> {
@@ -547,6 +547,29 @@ mod tests {
         assert!(rom_search.set_results.get("game4").is_some());
         let game4 = rom_search.set_results.get("game4").unwrap();
         assert_eq!(4, game4.roms_included.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn get_disk_id_retrieval() -> Result<()> {
+        let path = Path::new("testdata").join("test.dat");
+        let conn = get_db_connection(&path)?;
+
+        let mut files = vec![];
+        let mut disk1 = GameDisk::new("gm5-001.chd");
+        let mut disk1_info = GameDiskInfo::new();
+        disk1_info.sha1 = Some("0f8eb9bb79efdc84dfdb46e2a1c123dd5a7dd221".to_string());
+        disk1_info.region = Some("cdrom".to_string());
+        disk1.info = disk1_info;
+        files.push(disk1);
+
+        let disks_ids = DBReader::get_ids_from_disks(&conn, files)?;
+
+        assert_eq!(1, disks_ids.found.len());
+        assert_eq!(0, disks_ids.not_found.len());
+        assert_eq!(1, disks_ids.found[0].id);
+        assert_eq!("gm5-001.chd", disks_ids.found[0].file.name);
 
         Ok(())
     }
