@@ -374,10 +374,10 @@ mod tests {
         let game_path = Path::new("testdata").join("split");
         let report = reporter.check(vec![ game_path ], RomsetMode::Merged).await?;
 
-        assert_eq!(inner.borrow().total_files, 7);
+        assert_eq!(inner.borrow().total_files, 8);
         assert_eq!(inner.borrow().current_files, 7);
         assert_eq!(inner.borrow().new_files, 7);
-        assert_eq!(inner.borrow().directories, 0);
+        assert_eq!(inner.borrow().directories, 1);
         assert_eq!(inner.borrow().ignored, 0);
         assert_eq!(inner.borrow().error, 0);
         assert!(inner.borrow().finished);
