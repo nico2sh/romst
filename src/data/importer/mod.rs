@@ -5,7 +5,7 @@ use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
 use crate::{data::writer::*, err, error::RomstError};
 
-use super::models::{disk::GameDisk, file::DataFile, file::{DataFileInfo, FileType}, game::Game};
+use super::models::{disk::{GameDisk, GameDiskInfo}, file::DataFile, file::{DataFileInfo, FileType}, game::Game};
 
 pub struct DatImporter<R: BufRead, W: DataWriter> {
     reader: Reader<R>,
@@ -380,25 +380,21 @@ fn file_from_attributes(file_type: FileType, attributes: Attributes) -> Result<D
 
 fn disk_from_attributes(attributes: Attributes) -> Result<GameDisk> {
     let mut disk_name = None;
-    let mut sha1 = None;
-    let mut region = None;
-    let mut status = None;
+    let mut disk_info = GameDiskInfo::new();
 
     process_attributes(attributes, |key, value| {
         match key.to_lowercase().as_str() {
             "name" => disk_name = Some(value.to_string()),
-            "sha1" => sha1 = Some(String::from(value)),
-            "region" => region = Some(String::from(value)),
-            "status" => status = Some(String::from(value).to_lowercase()),
+            "sha1" => disk_info.sha1 = Some(String::from(value)),
+            "region" => disk_info.region = Some(String::from(value)),
+            "status" => disk_info.status = Some(String::from(value).to_lowercase()),
             k => debug!("Unknown atribute parsing: {}", k),
         }
     });
 
     if let Some(name) = disk_name {
         let mut disk = GameDisk::new(name);
-        disk.sha1 = sha1;
-        disk.region = region;
-        disk.status = status;
+        disk.info = disk_info;
         Ok(disk)
     } else {
         error!("Found disk without name, not adding");
