@@ -4,7 +4,7 @@ use anyhow::Result;
 use log::{debug, error};
 use rusqlite::{Connection, params};
 
-use crate::{data::{models::{file::{DataFile, DataFileInfo}, game::Game}, reader::sqlite::DBReader}};
+use crate::{data::{models::{disk::{GameDisk, GameDiskInfo}, file::{DataFile, DataFileInfo}, game::Game}, reader::sqlite::DBReader}};
 use super::DataWriter;
 
 #[derive(Debug)]
@@ -15,9 +15,15 @@ pub struct IdsCounter {
 
 impl IdsCounter {
     pub fn new() -> Self { Self { rom: 0, disk: 0 } }
+
     pub fn get_next_rom(&mut self) -> u32 {
         let id = self.rom;
         self.rom += 1;
+        id
+    }
+    pub fn get_next_disk(&mut self) -> u32 {
+        let id = self.disk;
+        self.disk += 1;
         id
     }
 }
@@ -35,26 +41,28 @@ struct Buffer {
     games: HashMap<String, Rc<Game>>,
 
     roms: HashMap<DataFileInfo, u32>,
-    game_roms: HashMap<String, Vec<GameRomBufferItem>>,
+    game_roms: HashMap<String, Vec<GameFileBufferItem>>,
     samples: HashMap<String, HashSet<String>>,
     device_refs: HashMap<String, HashSet<String>>,
-    disks: HashMap<DataFile, u32>,
-    game_disks: HashMap<String, Vec<u32>>,
+    disks: HashMap<GameDiskInfo, u32>,
+    game_disks: HashMap<String, Vec<GameFileBufferItem>>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct GameRomBufferItem {
+struct GameFileBufferItem {
     name: String,
-    rom_id: u32,
+    id: u32,
     status: Option<String>
 }
 
-impl GameRomBufferItem {
+impl GameFileBufferItem {
     fn from_data_file(rom_id: u32, data_file: DataFile) -> Self {
-        Self { name: data_file.name, rom_id, status: data_file.status } 
+        Self { name: data_file.name, id: rom_id, status: data_file.status } 
+    }
+    fn from_disk_file(disk_id: u32, disk_file: GameDisk) -> Self {
+        Self { name: disk_file.name, id: disk_id, status: disk_file.info.status }
     }
 }
-
 
 impl Buffer {
     fn new() -> Self {
@@ -96,7 +104,7 @@ impl Buffer {
         rom_ids
     }
 
-    fn add_roms_for_game(&mut self, game_name: String, rom_ids: Vec<GameRomBufferItem>) {
+    fn add_roms_for_game(&mut self, game_name: String, rom_ids: Vec<GameFileBufferItem>) {
         self.game_roms.insert(game_name, rom_ids);
     }
 
@@ -104,16 +112,16 @@ impl Buffer {
         self.samples.entry(sample_pack).or_insert(HashSet::new()).extend(samples);
     }
 
-    fn add_disks(&mut self, disks: Vec<DataFile>) -> Vec<(u32, DataFile)> {
+    fn add_disks(&mut self, disks: Vec<GameDisk>) -> Vec<(u32, GameDisk)> {
         let mut disk_ids = vec![];
         disks.into_iter().for_each(|disk| {
-            match self.disks.get(&disk) {
+            match self.disks.get(&disk.info) {
                 Some(disk_id) => {
                     disk_ids.push((*disk_id, disk));
                 }
                 None => {
-                    let id = self.ids.get_next_rom();
-                    self.disks.insert(disk.clone(), id);
+                    let id = self.ids.get_next_disk();
+                    self.disks.insert(disk.info.clone(), id);
                     disk_ids.push((id, disk));
                 }
             }
@@ -122,7 +130,7 @@ impl Buffer {
         disk_ids
     }
 
-    fn add_disks_for_game(&mut self, game_name: String, disk_ids: Vec<u32>) {
+    fn add_disks_for_game(&mut self, game_name: String, disk_ids: Vec<GameFileBufferItem>) {
         self.game_disks.insert(game_name, disk_ids);
     }
 
@@ -275,14 +283,12 @@ impl <'d> DBWriter<'d> {
         self.conn.execute(
             "CREATE TABLE disks (
                 id      INTEGER PRIMARY KEY,
-                name    TEXT,
                 sha1    TEXT,
                 region  TEXT,
                 status  TEXT);", 
             params![])?;
         debug!("Creating disks indexes");
         // Indexes
-        self.conn.execute("CREATE INDEX disks_name ON disks(name);", params![])?;
         self.conn.execute("CREATE INDEX disks_sha1 ON disks(sha1);", params![])?;
 
         Ok(())
@@ -296,7 +302,7 @@ impl <'d> DBWriter<'d> {
             "CREATE TABLE game_disks (
                 game_name   TEXT,
                 disk_id     INTEGER,
-                parent      TEXT,
+                name        TEXT,
                 PRIMARY KEY (game_name, disk_id));",
             params![])?;
         debug!("Creating Games/Disks indexes");
@@ -324,22 +330,22 @@ impl <'d> DBWriter<'d> {
         Ok(())
     }
 
-    fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<GameRomBufferItem>> {
+    fn get_rom_ids(&mut self, roms: Vec<DataFile>) -> Result<Vec<GameFileBufferItem>> {
         // We search the database
         let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?;
 
-        let mut rom_name_pair: Vec<GameRomBufferItem> = rom_ids.found.into_iter().map(|db_roms|{
-            GameRomBufferItem::from_data_file(db_roms.id, db_roms.file)
+        let mut rom_name_pair: Vec<GameFileBufferItem> = rom_ids.found.into_iter().map(|db_roms|{
+            GameFileBufferItem::from_data_file(db_roms.id, db_roms.file)
         }).collect();
 
         // We add in the buffer what is not in the database
-        let mut in_buffer: Vec<GameRomBufferItem> = self.buffer.add_roms(rom_ids.not_found).into_iter().map(|rom| {
-            GameRomBufferItem::from_data_file(rom.0, rom.1)
+        let mut in_buffer: Vec<GameFileBufferItem> = self.buffer.add_roms(rom_ids.not_found).into_iter().map(|rom| {
+            GameFileBufferItem::from_data_file(rom.0, rom.1)
         }).collect();
 
         in_buffer.extend(self.buffer.add_roms(rom_ids.ignored).into_iter().map(|rom| {
-            GameRomBufferItem::from_data_file(rom.0, rom.1)
-        }).collect::<Vec<GameRomBufferItem>>());
+            GameFileBufferItem::from_data_file(rom.0, rom.1)
+        }).collect::<Vec<GameFileBufferItem>>());
 
         rom_name_pair.append(&mut in_buffer);
 
@@ -350,6 +356,30 @@ impl <'d> DBWriter<'d> {
         Ok(rom_name_pair)
     }
 
+    fn get_disk_ids(&mut self, disks: Vec<GameDisk>) -> Result<Vec<GameFileBufferItem>> {
+        let disk_ids = DBReader::get_ids_from_disks(self.conn, disks)?;
+
+        let mut disk_name_pair: Vec<GameFileBufferItem> = disk_ids.found.into_iter().map(|db_disk|{
+            GameFileBufferItem::from_disk_file(db_disk.id, db_disk.file)
+        }).collect();
+
+        let mut in_buffer: Vec<GameFileBufferItem> = self.buffer.add_disks(disk_ids.not_found).into_iter().map(|disk| {
+            GameFileBufferItem::from_disk_file(disk.0, disk.1)
+        }).collect();
+
+        in_buffer.extend(self.buffer.add_disks(disk_ids.ignored).into_iter().map(|disk| {
+            GameFileBufferItem::from_disk_file(disk.0, disk.1)
+        }).collect::<Vec<GameFileBufferItem>>());
+
+        disk_name_pair.append(&mut in_buffer);
+
+        // We remove the duplicates
+        disk_name_pair.sort();
+        disk_name_pair.dedup();
+
+        Ok(disk_name_pair)
+    }
+
     fn write_buffer(&mut self) -> Result<()> {
         let tx = self.conn.transaction()?;
         let game_buffer = &self.buffer.games;
@@ -357,6 +387,8 @@ impl <'d> DBWriter<'d> {
         let game_rom_buffer = &self.buffer.game_roms;
         let sample_buffer = &self.buffer.samples;
         let devices_buffer = &self.buffer.device_refs;
+        let disk_buffer = &self.buffer.disks;
+        let game_disk_buffer = &self.buffer.game_disks;
 
         let values = game_buffer.values();
         for value in values {
@@ -365,11 +397,12 @@ impl <'d> DBWriter<'d> {
                 game.clone_of,
                 game.rom_of,
                 game.source_file,
+                game.sample_of,
                 game.info_description,
                 game.info_year,
                 game.info_manufacturer];
-            let result = tx.execute("INSERT INTO games (name, clone_of, rom_of, source_file, info_desc, info_year, info_manuf)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);",
+            let result = tx.execute("INSERT INTO games (name, clone_of, rom_of, source_file, sample_of, info_desc, info_year, info_manuf)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
                 p);
             match result {
                     Ok(_) => {}
@@ -396,9 +429,9 @@ impl <'d> DBWriter<'d> {
             for rom_id_name in rom_id_names {
                 let result = tx.execute(
                     "INSERT INTO game_roms (game_name, rom_id, name, status) VALUES (?1, ?2, ?3, ?4);",
-                    params![ game_name, rom_id_name.rom_id, rom_id_name.name, rom_id_name.status ] );
+                    params![ game_name, rom_id_name.id, rom_id_name.name, rom_id_name.status ] );
                 match result {
-                    Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.name, rom_id_name.rom_id, game_name) }
+                    Ok(_n) => { debug!("Inserted rom {} with id {} to the game {}", rom_id_name.name, rom_id_name.id, game_name) }
                     Err(e) => { error!("Error adding rom `{}` to the game {}: {}", rom_id_name.name, "", e) }
                 }
             }
@@ -432,12 +465,41 @@ impl <'d> DBWriter<'d> {
             }
         }
 
+        for disk_data in disk_buffer {
+            let disk = disk_data.0;
+            let disk_id = disk_data.1;
+
+            let result = tx.execute(
+                "INSERT INTO disks (id, sha1, region, status) VALUES (?1, ?2, ?3, ?4);",
+                params![disk_id, disk.sha1, disk.region, disk.status]);
+                match result {
+                    Ok(_) => { debug!("Inserted disk `{}` with id `{}`", disk, disk_id); }
+                    Err(e) => { error!("Error inserting disk `{}`: {}", disk, e); }
+                }
+        }
+
+        for game_disk in game_disk_buffer {
+            let game_name = game_disk.0;
+            let ids = game_disk.1;
+            for id in ids {
+                let result = tx.execute(
+                    "INSERT INTO game_disks (game_name, disk_id, name) VALUES (?1, ?2, ?3);",
+                    params![game_name, id.id, id.name]);
+                match result {
+                    Ok(_) => { debug!("Inserted disk id `{}` for game `{}`", id.id, game_name); }
+                    Err(e) => { error!("Error inserting disk id `{}` for game `{}`: {}", id.id, game_name, e); }
+                }
+            }
+        }
+
         tx.commit()?;
         self.buffer.games.clear();
         self.buffer.roms.clear();
         self.buffer.game_roms.clear();
         self.buffer.samples.clear();
         self.buffer.device_refs.clear();
+        self.buffer.disks.clear();
+        self.buffer.game_disks.clear();
 
         Ok(())
     }
@@ -484,10 +546,10 @@ impl <'d> DBWriter<'d> {
         Ok(())
     }
 
-    fn add_disks_for_game(&mut self, disks:Vec<DataFile>, game_name: &str) -> Result<()> {
-        // let disk_list = self.get_disk_ids(disks)?;
+    fn add_disks_for_game(&mut self, disks:Vec<GameDisk>, game_name: &str) -> Result<()> {
+        let disk_list = self.get_disk_ids(disks)?;
 
-        // self.buffer.ad
+        self.buffer.add_disks_for_game(game_name.to_string(), disk_list);
 
         Ok(())
     }
@@ -498,7 +560,7 @@ impl <'d> DataWriter for DBWriter<'d> {
         self.create_schema()
     }
     
-    fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<DataFile>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
+    fn on_new_entry(&mut self, game: Game, roms: Vec<DataFile>, disks: Vec<GameDisk>, samples: Vec<String>, device_refs: Vec<String>) -> Result<()> {
         let game_ref = Rc::new(game);
 
         let game_name = &game_ref.name;
@@ -509,7 +571,7 @@ impl <'d> DataWriter for DBWriter<'d> {
         if let Some(sample_name) = sample {
             self.add_samples(samples, sample_name)?;
         }
-        // self.add_disks_for_game(disks, game_name)?;
+        self.add_disks_for_game(disks, game_name)?;
         self.add_devices_for_game(device_refs, game_name)?;
 
         Ok(())

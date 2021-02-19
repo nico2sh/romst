@@ -8,17 +8,17 @@ use anyhow::Result;
 use console::Style;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DbDataFile {
+pub struct DbDataEntry<T> {
     pub id: u32,
-    pub file: DataFile,
+    pub file: T,
 }
 
-impl DbDataFile {
-    pub fn new(id: u32, file: DataFile) -> Self { Self { id, file } }
+impl <T> DbDataEntry<T> {
+    pub fn new(id: u32, file: T) -> Self { Self { id, file } }
 }
 
 
-impl Display for DbDataFile {
+impl <T> Display for DbDataEntry<T> where T: Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}] {}", self.id, self.file)
     }
@@ -26,7 +26,7 @@ impl Display for DbDataFile {
 
 #[derive(Debug)]
 pub struct RomSearch {
-    searched_roms: HashSet<Rc<DbDataFile>>,
+    searched_roms: HashSet<Rc<DbDataEntry<DataFile>>>,
     pub set_results: HashMap<String, SetContent>,
     pub unknowns: Vec<DataFile>
 }
@@ -35,7 +35,7 @@ impl RomSearch {
     pub fn new() -> Self {
         Self { searched_roms: HashSet::new(), set_results: HashMap::new(), unknowns: vec![] }
     }
-    pub fn add_file_for_set(&mut self, set_name: String, file: DbDataFile) {
+    pub fn add_file_for_set(&mut self, set_name: String, file: DbDataEntry<DataFile>) {
         let set_results = &mut self.set_results;
 
         let f = Rc::new(file);
@@ -47,7 +47,7 @@ impl RomSearch {
         self.unknowns.push(file);
     }
 
-    pub fn get_roms_available_for_set(&self, set: &String) -> Vec<DbDataFile> {
+    pub fn get_roms_available_for_set(&self, set: &String) -> Vec<DbDataEntry<DataFile>> {
         if let Some(set_result) = self.set_results.get(set){
             set_result.roms_included.iter().map(|data_file| {
                 data_file.deref().to_owned()
@@ -82,13 +82,13 @@ impl RomSearch {
 
 #[derive(Debug)]
 pub struct SetContent {
-    roms_included: HashSet<Rc<DbDataFile>>
+    roms_included: HashSet<Rc<DbDataEntry<DataFile>>>
 }
 
 impl SetContent {
     fn new() -> Self { Self { roms_included: HashSet::new() } }
 
-    pub fn get_roms_included(&self) -> Vec<&DbDataFile> {
+    pub fn get_roms_included(&self) -> Vec<&DbDataEntry<DataFile>> {
         let a = self.roms_included.iter().map(|data_file| {
             data_file.deref()
         }).collect::<Vec<_>>();
@@ -148,7 +148,7 @@ impl FileCheckSearch {
 pub trait DataReader {
     fn get_game<S>(&self, game_name: S) -> Option<Game> where S: AsRef<str> + rusqlite::ToSql;
     /// Returns all the roms for a specific romset
-    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DbDataFile>> where S: AsRef<str> + rusqlite::ToSql;
+    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DbDataEntry<DataFile>>> where S: AsRef<str> + rusqlite::ToSql;
     fn get_game_set<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<GameSet> where S: AsRef<str> + rusqlite::ToSql {
         match self.get_game(&game_name) {
             Some(game) => {
@@ -177,7 +177,7 @@ pub trait DataReader {
 
 #[cfg(test)]
 mod tests {
-    use super::{DbDataFile, FileCheckSearch, RomSearch};
+    use super::{DbDataEntry, FileCheckSearch, RomSearch};
     use crate::{data::models::file::{DataFile, DataFileInfo, FileType}, filesystem::FileChecks};
 
     #[test]
@@ -262,9 +262,9 @@ mod tests {
         rom3.info.crc = Some("fbe0d501".to_string());
 
         let mut rom_search = RomSearch::new();
-        rom_search.add_file_for_set("set1".to_string(), DbDataFile::new(1, rom1));
-        rom_search.add_file_for_set("set2".to_string(), DbDataFile::new(2, rom2));
-        rom_search.add_file_for_set("set2".to_string(), DbDataFile::new(3, rom3));
+        rom_search.add_file_for_set("set1".to_string(), DbDataEntry::new(1, rom1));
+        rom_search.add_file_for_set("set2".to_string(), DbDataEntry::new(2, rom2));
+        rom_search.add_file_for_set("set2".to_string(), DbDataEntry::new(3, rom3));
 
         let available_1 = rom_search.get_roms_available_for_set(&"set1".to_string());
         let spare_1 = rom_search.get_roms_to_spare_for_set(&"set1".to_string());

@@ -3,6 +3,7 @@ use std::path::Path;
 pub mod set;
 pub mod game;
 pub mod file;
+pub mod disk;
 
 pub fn get_set_from_file(file: &str) -> String {
     let file_path = Path::new(file);
