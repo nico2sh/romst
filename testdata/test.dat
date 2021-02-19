@@ -30,6 +30,7 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<year>1989</year>
 		<manufacturer>None</manufacturer>
 		<rom name="romnone.rom" size="2048" status="nodump"/>
+		<disk name="unknown-001.chd" region="harddisk:image" status="nodump"/>
 		<device_ref name="screen"/>
 		<driver status="imperfect"/>
 	</machine>
@@ -99,6 +100,6 @@ CTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.l
 		<rom name="trailing.b" size="2048" crc="0c8f1eb3" SHA1="edaed032762ebc5e07bf3dec8a0d278120f31910" />
 		<rom name="some_0.b" size="2048" crc="05ec55ed" SHA1="86bbfdd134898f45bbb6e53954d050f61c077d1b" />
 		<rom name="more_0.b" size="512" crc="00fef32d" SHA1="748c336a68bcaec48a0c6410533e3c33c9f50b4f" />
+		<disk name="gm5-001.chd" SHA1="0f8eb9bb79efdc84dfdb46e2a1c123dd5a7dd221" region="cdrom"/>
 	</machine>
 </datafile>
-
