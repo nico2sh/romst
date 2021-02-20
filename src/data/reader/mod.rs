@@ -5,9 +5,9 @@ use std::{collections::{HashMap, HashSet}, fmt::Display, ops::Deref, rc::Rc};
 use crate::{RomsetMode, err, error::RomstError, filesystem::FileChecks};
 use super::models::{file::DataFile, game::Game, set::GameSet};
 use anyhow::Result;
+use serde::{Serialize, Deserialize};
 use console::Style;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DbDataEntry<T> {
     pub id: u32,
     pub file: T,
@@ -24,7 +24,7 @@ impl <T> Display for DbDataEntry<T> where T: Display {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RomSearch {
     searched_roms: HashSet<Rc<DbDataEntry<DataFile>>>,
     pub set_results: HashMap<String, SetContent>,
@@ -80,7 +80,7 @@ impl RomSearch {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SetContent {
     roms_included: HashSet<Rc<DbDataEntry<DataFile>>>
 }

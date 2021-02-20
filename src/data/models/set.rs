@@ -1,8 +1,9 @@
 use std::fmt::Display;
 
 use super::{file::DataFile, game::Game};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GameSet {
     pub game: Game,
     pub roms: Vec<DataFile>,
