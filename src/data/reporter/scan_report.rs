@@ -6,12 +6,16 @@ use crate::{RomsetMode, data::models::{self, file::DataFile}};
 
 #[derive(Debug)]
 pub struct ScanReport {
+    root_directory: Option<String>,
     rom_mode: RomsetMode,
     pub sets: HashMap<String, SetReport>,
 }
 
 impl Display for ScanReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(path) = &self.root_directory {
+            writeln!(f, "Scanned dir: {}", path)?;
+        }
         writeln!(f, "Mode: {}", self.rom_mode)?;
         writeln!(f, "")?;
         for set in &self.sets {
@@ -23,7 +27,12 @@ impl Display for ScanReport {
 }
 
 impl ScanReport {
-    pub fn new(rom_mode: RomsetMode) -> Self { Self { rom_mode, sets: HashMap::new() } }
+    pub fn new(root_directory: Option<String>, rom_mode: RomsetMode) -> Self {
+        Self {
+            root_directory,
+            rom_mode, sets: HashMap::new()
+        }
+    }
 
     pub fn add_rom_for_set<S>(&mut self, set_name: S, location: RomLocation, rom: DataFile) where S: AsRef<str> {
         let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
@@ -414,7 +423,7 @@ mod tests {
 
     #[test]
     fn has_missing_then_fixeable_then_complete() {
-        let mut scan_report = ScanReport::new(RomsetMode::Split);
+        let mut scan_report = ScanReport::new(None, RomsetMode::Split);
 
         // A rom in the right place
         scan_report.add_rom_for_set("set1", RomLocation::new("set1.zip", "file1"),
