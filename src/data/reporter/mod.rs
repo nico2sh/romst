@@ -1,6 +1,6 @@
 pub mod scan_report;
 
-use std::path::{Path, PathBuf};
+use std::{fs, path::{Path, PathBuf}};
 use crate::{RomsetMode, err, error::RomstIOError, filesystem::FileReader};
 
 
@@ -63,7 +63,7 @@ impl<R: DataReader> Reporter<R> {
             }
         }
 
-        self.check_files(file_paths, rom_mode).await
+        self.check_files(None::<PathBuf>, file_paths, rom_mode).await
     }
 
     async fn check_directory(&mut self, file_path: &impl AsRef<Path>, rom_mode: RomsetMode) -> Result<ScanReport> {
@@ -77,7 +77,7 @@ impl<R: DataReader> Reporter<R> {
                     None
                 }
             }).collect::<Vec<PathBuf>>();
-            self.check_files(contents, rom_mode).await
+            self.check_files(Some(file_path), contents, rom_mode).await
         } else {
             err!("Path is not a directory")
         }
@@ -153,10 +153,20 @@ impl<R: DataReader> Reporter<R> {
         Ok(receiver)
     }
 
-    async fn check_files(&mut self, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<ScanReport> {
+    async fn check_files(&mut self, source_directory: Option<impl AsRef<Path>>, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode) -> Result<ScanReport> {
         let mut rx = self.send_sets_from_files(file_paths).await?;
 
-        let mut scan_report = ScanReport::new(rom_mode);
+        let source_dir = match source_directory {
+            Some(path) => {
+                let absolute = fs::canonicalize(path.as_ref())?;
+                Some(absolute.to_string_lossy().to_string())
+            }
+            None => {
+                None
+            }
+        };
+
+        let mut scan_report = ScanReport::new(source_dir, rom_mode);
 
         while let Some(message) = rx.recv().await {
             let file_name = message.file_name;
