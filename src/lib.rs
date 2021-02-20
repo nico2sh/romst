@@ -60,6 +60,25 @@ pub struct Romst {
 
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GameSetsInfo {
+    pub game_sets: Vec<GameSet>
+}
+
+impl GameSetsInfo {
+    pub fn new(game_sets: Vec<GameSet>) -> Self { Self { game_sets } }
+}
+
+
+impl Display for GameSetsInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for game_set in &self.game_sets {
+            writeln!(f, "{}", game_set)?;
+        };
+        Ok(())
+    }
+}
+
 impl Romst {
     fn get_rw_connection<S>(db_file: S) -> Result<Connection> where S: AsRef<str>{
         let db_path = Path::new(db_file.as_ref());
@@ -108,7 +127,7 @@ impl Romst {
         Ok(())
     }
 
-    pub fn get_set_info<S>(db_file: S, game_names: Vec<S>, rom_mode: RomsetMode) -> Result<Vec<GameSet>> where S: AsRef<str> {
+    pub fn get_set_info<S>(db_file: S, game_names: Vec<S>, rom_mode: RomsetMode) -> Result<GameSetsInfo> where S: AsRef<str> {
         let mut games =  vec![];
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
@@ -126,7 +145,7 @@ impl Romst {
             }
         }
 
-        Ok(games)
+        Ok(GameSetsInfo::new(games))
     }
 
     pub fn get_rom_usage<S>(db_file: S, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> {
