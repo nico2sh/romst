@@ -4,6 +4,7 @@ use anyhow::Result;
 use console::Style;
 use log::{debug, error, warn};
 use rusqlite::{Connection, ToSql, params};
+use serde::{Deserialize, Serialize};
 
 use crate::{RomsetMode, data::models::{disk::GameDisk, file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
 
@@ -28,6 +29,7 @@ impl <T> SearchEntryIds<T> {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct DBReport {
     pub games: u32,
     pub roms: u32,

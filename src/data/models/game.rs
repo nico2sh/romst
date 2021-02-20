@@ -1,6 +1,7 @@
 use std::fmt;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Game {
     pub name: String,
     pub clone_of: Option<String>,
