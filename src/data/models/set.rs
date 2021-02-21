@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, writeln};
 
 use super::{file::DataFile, game::Game};
 use serde::{Deserialize, Serialize};
@@ -9,26 +9,41 @@ pub struct GameSet {
     pub roms: Vec<DataFile>,
     pub samples: Vec<DataFile>,
     pub disks: Vec<DataFile>,
+    pub device_refs: Vec<String>,
 }
 
 impl GameSet {
-    pub fn new(game: Game, roms: Vec<DataFile>, samples: Vec<DataFile>, disks: Vec<DataFile>) -> Self { Self { game, roms, samples, disks } }
+    pub fn new(game: Game, roms: Vec<DataFile>, samples: Vec<DataFile>, disks: Vec<DataFile>, device_refs: Vec<String>) -> Self { Self { game, roms, samples, disks, device_refs } }
 }
-
 
 impl Display for GameSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut output = format!("{}", self.game);
-        for rom in self.roms.as_slice() {
-            output.push_str(&format!("\n    - {}", rom));
+        writeln!(f, "{}", self.game)?;
+        if !self.roms.is_empty() {
+            writeln!(f, "Roms:")?;
+            for rom in self.roms.as_slice() {
+                writeln!(f, "    - {}", rom)?;
+            }
         }
-        for sample in self.samples.as_slice() {
-            output.push_str(&format!("\n    - {}", sample));
+        if !self.samples.is_empty() {
+            writeln!(f, "Samples:")?;
+            for sample in self.samples.as_slice() {
+                writeln!(f, "    - {}", sample)?;
+            }
         }
-        for disk in self.disks.as_slice() {
-            output.push_str(&format!("\n    - {}", disk));
+        if !self.disks.is_empty() {
+            writeln!(f, "Disks:")?;
+            for disk in self.disks.as_slice() {
+                writeln!(f, "    - {}", disk)?;
+            }
+        }
+        if !self.device_refs.is_empty() {
+            writeln!(f, "Depends on:")?;
+            for device_ref in self.device_refs.as_slice() {
+                writeln!(f, "    - {}", device_ref)?;
+            }
         }
 
-        write!(f, "{}", output)
+        Ok(())
     }
 }

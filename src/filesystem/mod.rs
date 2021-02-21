@@ -101,7 +101,7 @@ impl FileReader {
             Err(e) => { return Err(RomstIOError::Io{ source: e.into() }) }
         }
 
-        let game_set = GameSet::new(game, roms, vec![], vec![]);
+        let game_set = GameSet::new(game, roms, vec![], vec![], vec![]);
 
         Ok(game_set)
     }
