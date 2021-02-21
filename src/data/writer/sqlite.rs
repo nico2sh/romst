@@ -109,7 +109,7 @@ impl Buffer {
     }
 
     fn add_sample_pack(&mut self, sample_pack: String, samples: Vec<String>) {
-        self.samples.entry(sample_pack).or_insert(HashSet::new()).extend(samples);
+        self.samples.entry(sample_pack).or_insert_with(HashSet::new).extend(samples);
     }
 
     fn add_disks(&mut self, disks: Vec<GameDisk>) -> Vec<(u32, GameDisk)> {
