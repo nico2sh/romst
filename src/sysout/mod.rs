@@ -16,6 +16,12 @@ impl DatImporterReporterSysOut {
     }
 }
 
+impl Default for DatImporterReporterSysOut {
+    fn default() -> Self {
+        DatImporterReporterSysOut::new()
+    }
+}
+
 impl DatImporterReporter for DatImporterReporterSysOut {
     fn set_total_bytes(&mut self, total_bytes: u64) {
         self.progress_bar.set_length(total_bytes);
@@ -25,7 +31,7 @@ impl DatImporterReporter for DatImporterReporterSysOut {
     }
 
     fn update_position(&mut self, current_bytes: u64, new_entries: u32) {
-        self.entries = self.entries + new_entries;
+        self.entries += new_entries;
 
         self.progress_bar.set_position(current_bytes);
         self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
@@ -33,7 +39,7 @@ impl DatImporterReporter for DatImporterReporterSysOut {
 
     fn start_finish(&self) {
         self.progress_bar.finish_at_current_pos();
-        self.progress_bar.set_message(&format!("Finishing, hold on..."));
+        self.progress_bar.set_message("Finishing, hold on...");
     }
 
     fn finish(&self) {
@@ -55,7 +61,7 @@ pub struct ReportReporterSysOut {
 
 impl ReportReporterSysOut {
     pub fn new() -> Self {
-        let progress_bar =ProgressBar::new(!0);
+        let progress_bar = ProgressBar::new(!0);
         progress_bar.set_style(ProgressStyle::default_bar()
             .template("{prefix}\n{spinner:.green} [{elapsed_precise}] [{bar:40.green/blue}] {pos}% ({eta}) | {msg}")
             .progress_chars("#>-"));
@@ -66,6 +72,12 @@ impl ReportReporterSysOut {
     fn update_info_numbers(&mut self) {
         self.progress_bar.set_prefix(&format!("P: Processed / D: Directories / I: Ignored | {}", self.current_file));
         self.progress_bar.set_message(&format!("P: {} / D: {} / I: {} / E: {}", self.new_files, self.directories, self.ignored, self.error));
+    }
+}
+
+impl Default for ReportReporterSysOut {
+    fn default() -> Self {
+        ReportReporterSysOut::new()
     }
 }
 

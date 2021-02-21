@@ -17,7 +17,7 @@ impl Display for ScanReport {
             writeln!(f, "Scanned dir: {}", path)?;
         }
         writeln!(f, "Mode: {}", self.rom_mode)?;
-        writeln!(f, "")?;
+        writeln!(f)?;
         for set in &self.sets {
             let s = set.1; 
             writeln!(f, "{}", s)?;
@@ -35,7 +35,7 @@ impl ScanReport {
     }
 
     pub fn add_rom_for_set<S>(&mut self, set_name: S, location: RomLocation, rom: DataFile) where S: AsRef<str> {
-        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
+        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert_with(|| SetReport::new(set_name.as_ref()));
         match &rom.status {
             Some(status) if status.to_lowercase() == "nodump" => {
                 set.roms_unneeded.insert(rom);
@@ -47,7 +47,7 @@ impl ScanReport {
     }
 
     pub fn add_missing_roms_for_set<I, S>(&mut self, set_name: S, roms: I) where I: IntoIterator<Item = DataFile>, S: AsRef<str> {
-        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
+        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert_with(|| SetReport::new(set_name.as_ref()));
         roms.into_iter().for_each(|rom| {
             match &rom.status {
                 Some(status) if status.to_lowercase() == "nodump" => {
@@ -61,7 +61,7 @@ impl ScanReport {
     }
 
     pub fn add_missing_rom_for_set<S>(&mut self, set_name: S, rom: DataFile) where S: AsRef<str> {
-        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert(SetReport::new(set_name.as_ref()));
+        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert_with(|| SetReport::new(set_name.as_ref()));
         match &rom.status {
             Some(status) if status.to_lowercase() == "nodump" => {
                 set.roms_unneeded.insert(rom);
@@ -74,12 +74,12 @@ impl ScanReport {
 
     pub fn set_in_file<S>(&mut self, source_file: S) where S: AsRef<str> {
         let set_name = models::get_set_from_file(source_file.as_ref());
-        self.sets.entry(set_name.clone()).or_insert(SetReport::new(set_name)).in_file = true;
+        self.sets.entry(set_name.clone()).or_insert_with(|| SetReport::new(set_name)).in_file = true;
     }
 
     pub fn add_unknown_files<I, S>(&mut self, files: I, source_file: S) where I: IntoIterator<Item = DataFile>, S: AsRef<str> {
         let set_name = models::get_set_from_file(source_file.as_ref());
-        let set = self.sets.entry(set_name.clone()).or_insert(SetReport::new(set_name));
+        let set = self.sets.entry(set_name.clone()).or_insert_with(|| SetReport::new(set_name));
         for file in files {
             set.unknown.push(file);
         }
@@ -87,7 +87,7 @@ impl ScanReport {
 
     pub fn add_roms_to_spare<I, S>(&mut self, files: I, source_file: S) where I: IntoIterator<Item = DataFile>, S: AsRef<str> {
         let set_name = models::get_set_from_file(source_file.as_ref());
-        let set = self.sets.entry(set_name.clone()).or_insert(SetReport::new(set_name));
+        let set = self.sets.entry(set_name.clone()).or_insert_with(|| SetReport::new(set_name));
         files.into_iter().for_each(|rom| {
             set.roms_to_spare.insert(rom);
         });
@@ -114,7 +114,7 @@ impl Display for SetReport {
             ""
         };
         writeln!(f, "Status: {}{}", self.is_complete(), file_status)?;
-        if self.roms_available.len() > 0 {
+        if !self.roms_available.is_empty() {
             writeln!(f, "Roms Available")?;
             for available in &self.roms_available {
                 let rom = available.0;
@@ -132,19 +132,19 @@ impl Display for SetReport {
                 }
             }
         }
-        if self.roms_unneeded.len() > 0 {
+        if !self.roms_unneeded.is_empty() {
             writeln!(f, "Roms Unneeded (e.g. Bad Dumps)")?;
             for unneeded in &self.roms_unneeded {
                 writeln!(f, " - {}", unneeded.name)?;
             }
         }
-        if self.roms_missing.len() > 0 {
+        if !self.roms_missing.is_empty() {
             writeln!(f, "Roms Missing")?;
             for missing in &self.roms_missing {
                 writeln!(f, " - {}", missing.name)?;
             }
         }
-        if self.roms_to_spare.len() > 0 {
+        if !self.roms_to_spare.is_empty() {
             writeln!(f, "Roms to Spare")?;
             for to_spare in &self.roms_to_spare {
                 writeln!(f, " - {}", to_spare.name)?;
@@ -198,7 +198,7 @@ impl SetReport {
     }
 
     pub fn is_complete(&self) -> SetStatus {
-        if self.roms_missing.len() == 0 {
+        if self.roms_missing.is_empty() {
             let mut available = self.roms_available.len();
 
             for set_rom in &self.roms_available {
@@ -211,7 +211,7 @@ impl SetReport {
                 return SetStatus::COMPLETE;
             }
 
-            return SetStatus::FIXEABLE;
+            SetStatus::FIXEABLE
         } else {
             SetStatus::INCOMPLETE
         }

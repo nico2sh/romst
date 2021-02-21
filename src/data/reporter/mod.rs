@@ -135,13 +135,11 @@ impl<R: DataReader> Reporter<R> {
 
                         drop(wg);
                     });
-                } else {
-                    if let Some(reporter) = self.reporter.as_mut() {
-                        reporter.update_report_directory(1);
-                    };
-                }
+                } else if let Some(reporter) = self.reporter.as_mut() {
+                    reporter.update_report_directory(1);
+                };
             });
-        let sender = tx.clone();
+        let sender = tx;
         tokio::spawn(async move {
             wg.wait();
             if let Err(error) = sender.send(ReportMessage::new("".to_string(), 

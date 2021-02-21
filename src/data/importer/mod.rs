@@ -169,7 +169,7 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
 
         match self.reader.read_event(&mut buf)? {
             Event::End(_e) => {
-                return Ok(text);
+                Ok(text)
             },
             Event::Eof => return err!(RomstError::UnexpectedEOF),
             _e => return err!(RomstError::UnexpectedXMLTag { position: self.reader.buffer_position() }),
