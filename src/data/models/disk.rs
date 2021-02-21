@@ -11,6 +11,12 @@ impl GameDiskInfo {
     pub fn new() -> Self { Self { sha1: None, region: None, status: None } }
 }
 
+impl Default for GameDiskInfo {
+    fn default() -> Self {
+        GameDiskInfo::new()
+    }
+}
+
 impl Display for GameDiskInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut file_data = vec![];
