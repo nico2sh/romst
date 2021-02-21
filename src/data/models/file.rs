@@ -22,19 +22,11 @@ impl Display for FileType {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DataFile {
     pub name: String,
     pub info: DataFileInfo,
     pub status: Option<String>,
-}
-
-impl PartialEq for DataFile {
-    fn eq(&self, other: &Self) -> bool {
-        let name = self.name.eq(&other.name);
-
-        return name && self.info.eq(&other.info);
-    }
 }
 
 impl Ord for DataFile {
@@ -43,7 +35,7 @@ impl Ord for DataFile {
         let self_name = self.name.to_owned();
         let other_name = other.name.to_owned();
 
-        return self_name.cmp(&other_name);
+        self_name.cmp(&other_name)
     }
 }
 
@@ -87,7 +79,7 @@ impl DataFile {
     /// Compares two files with the requested info, if the info is not available in either file, the comparation is ignored
     pub fn deep_compare(&self, other: &Self, file_checks: FileChecks) -> Result<bool> {
         if !self.name.eq(&other.name) {
-            return Ok(false);
+            Ok(false)
         } else {
             self.info.deep_compare(&other.info, file_checks)
         }
@@ -211,7 +203,7 @@ impl Ord for DataFileInfo {
             return self_size.cmp(&other_size);
         }
 
-        return self.file_type.cmp(&other.file_type);
+        self.file_type.cmp(&other.file_type)
     }
 }
 

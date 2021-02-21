@@ -42,6 +42,12 @@ impl DBReport {
     pub fn new() -> Self { Self { games: 0, roms: 0, roms_in_games: 0, samples: 0, device_refs: 0 } }
 }
 
+impl Default for DBReport {
+    fn default() -> Self {
+        DBReport::new()
+    }
+}
+
 impl Display for DBReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", Style::new().bold().yellow().apply_to("Database info"))?;
@@ -112,7 +118,7 @@ impl <'d> DBReader <'d>{
         })?;
         db_report.device_refs = device_refs;
 
-        return Ok(db_report);
+        Ok(db_report)
     }
 
     fn find_sets_for_roms(&self, db_roms: Vec<DbDataEntry<DataFile>>, rom_mode: RomsetMode) -> Result<RomSearch> {
@@ -152,15 +158,13 @@ impl <'d> DBReader <'d>{
             // Since we can have more than one rom id with different name, we create a vec with each name
             // Most of the times it will be only one
             let rom_id: u32 = rows.8;
-            let file_names = db_roms.iter().filter_map(|db_rom| {
+            db_roms.iter().filter_map(|db_rom| {
                 if rom_id == db_rom.id {
                     Some(db_rom.file.name.clone())
                 } else {
                     None
                 }
-            }).collect::<Vec<_>>();
-
-            let dfs = file_names.into_iter().map(|file_name| {
+            }).map(|file_name| {
                 let mut data_file_info = DataFileInfo::new(FileType::Rom);
                 data_file_info.sha1 = rows.1.to_owned();
                 data_file_info.md5 = rows.2.to_owned();
@@ -172,8 +176,7 @@ impl <'d> DBReader <'d>{
                 rows.5.to_owned(),
                 rows.6.to_owned(),
                 rows.7.to_owned())
-            }).collect::<Vec<_>>();
-            dfs
+            }).collect::<Vec<_>>()
         }).collect::<Vec<_>>();
 
         let mut result = RomSearch::new();

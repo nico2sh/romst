@@ -39,7 +39,7 @@ impl RomSearch {
         let set_results = &mut self.set_results;
 
         let f = Rc::new(file);
-        set_results.entry(set_name).or_insert(SetContent::new()).roms_included.insert(Rc::clone(&f));
+        set_results.entry(set_name).or_insert_with(SetContent::new).roms_included.insert(Rc::clone(&f));
         self.searched_roms.insert(f);
     }
 
@@ -47,7 +47,7 @@ impl RomSearch {
         self.unknowns.push(file);
     }
 
-    pub fn get_roms_available_for_set(&self, set: &String) -> Vec<DbDataEntry<DataFile>> {
+    pub fn get_roms_available_for_set(&self, set: &str) -> Vec<DbDataEntry<DataFile>> {
         if let Some(set_result) = self.set_results.get(set){
             set_result.roms_included.iter().map(|data_file| {
                 data_file.deref().to_owned()
@@ -57,7 +57,7 @@ impl RomSearch {
         }
     }
 
-    pub fn get_roms_to_spare_for_set(&self, set: &String) -> Vec<DataFile> {
+    pub fn get_roms_to_spare_for_set(&self, set: &str) -> Vec<DataFile> {
         if let Some(set_result) = self.set_results.get(set) {
             self.searched_roms.iter().filter_map(|rom| {
                 if set_result.roms_included.contains(rom) {
@@ -72,11 +72,17 @@ impl RomSearch {
     }
 
     // returns the searched roms
-    pub fn get_searched_roms<'a>(&self) -> Vec<DataFile> {
+    pub fn get_searched_roms(&self) -> Vec<DataFile> {
         let a = self.searched_roms.iter().map(|item| {
             item.file.to_owned()
         }).collect::<Vec<_>>();
         a
+    }
+}
+
+impl Default for RomSearch {
+    fn default() -> Self {
+        RomSearch::new()
     }
 }
 
@@ -98,11 +104,11 @@ impl SetContent {
 
 impl  Display for RomSearch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.set_results.len() > 0 {
+        if !self.set_results.is_empty() {
             for game_roms in &self.set_results {
                 writeln!(f, "Set: {}", Style::new().green().bold().apply_to(game_roms.0))?;
                 let set_content = game_roms.1;
-                if set_content.roms_included.len() > 0 {
+                if !set_content.roms_included.is_empty() {
                     writeln!(f, "  {}:", Style::new().cyan().apply_to("Roms"))?;
                     for rom in &set_content.roms_included {
                         writeln!(f, "   - {}", rom)?;
@@ -111,7 +117,7 @@ impl  Display for RomSearch {
             }
         }
 
-        if self.unknowns.len() > 0 {
+        if !self.unknowns.is_empty() {
             writeln!(f, "  {}:", Style::new().red().apply_to("Unkown files"))?;
             for unknown in &self.unknowns {
                 writeln!(f, "   - {}", unknown)?;
@@ -132,13 +138,13 @@ impl FileCheckSearch {
     pub fn get_file_checks(&self) -> FileChecks {
         let mut use_checks = FileChecks::ALL;
         if self.sha1 == 0 {
-            use_checks = use_checks & !FileChecks::SHA1;
+            use_checks &= !FileChecks::SHA1;
         }
         if self.md5 == 0 {
-            use_checks = use_checks & !FileChecks::MD5;
+            use_checks &= !FileChecks::MD5;
         }
         if self.crc == 0 {
-            use_checks = use_checks & !FileChecks::CRC;
+            use_checks &= !FileChecks::CRC;
         }
 
         use_checks
