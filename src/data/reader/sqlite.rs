@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{RomsetMode, data::models::{disk::GameDisk, file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
 
-use super::{DataReader, DbDataEntry, FileCheckSearch, RomSearch};
+use super::{DataReader, DbDataEntry, FileCheckSearch, RomSearch, SetDependencies};
 
 #[derive(Debug)]
 pub struct SearchEntryIds<T> {
@@ -439,7 +439,7 @@ impl <'d> DataReader for DBReader<'d> {
         Ok(rom_search)
     }
 
-    fn get_devices_for_game<S>(&self, game_name: S) -> Result<Vec<String>> where S: AsRef<str> + rusqlite::ToSql {
+    fn get_devices_for_game<S>(&self, game_name: S) -> Result<SetDependencies> where S: AsRef<str> + rusqlite::ToSql {
         let mut search_stmt = self.conn.prepare("SELECT devices.device_ref FROM devices
             JOIN game_roms ON devices.device_ref = game_roms.game_name
             WHERE devices.game_name = ?1 GROUP BY devices.device_ref;")?;
@@ -448,7 +448,10 @@ impl <'d> DataReader for DBReader<'d> {
             Ok(row.get(0)?)
         })?.filter_map(|row| row.ok());
 
-        Ok(result.collect())
+        let mut set_dependencies = SetDependencies::new(game_name.as_ref());
+        set_dependencies.dependencies = result.collect();
+
+        Ok(set_dependencies)
     }
 
     fn get_file_checks(&self) -> Result<FileCheckSearch> {
@@ -696,8 +699,8 @@ mod tests {
         let data_reader = DBReader::from_connection(&conn);
 
         let devices = data_reader.get_devices_for_game(&"game1".to_string())?;
-        assert_eq!(devices.len(), 1);
-        assert_eq!(devices[0], "device1");
+        assert_eq!(devices.dependencies.len(), 1);
+        assert_eq!(devices.dependencies[0], "device1");
 
         Ok(())
     }

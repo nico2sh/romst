@@ -5,7 +5,7 @@ mod macros;
 pub mod sysout;
 
 use console::Style;
-use data::{importer::{DatImporter, DatImporterReporter}, models::set::GameSet, reader::{DataReader, RomSearch, sqlite::{DBReader, DBReport}}, reporter::{ReportReporter, Reporter, scan_report::ScanReport}, writer::sqlite::DBWriter};
+use data::{importer::{DatImporter, DatImporterReporter}, models::set::GameSet, reader::{DataReader, RomSearch, SetDependencies, sqlite::{DBReader, DBReport}}, reporter::{ReportReporter, Reporter, scan_report::ScanReport}, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
 use std::{fmt::Display, path::Path, str::FromStr};
@@ -135,9 +135,10 @@ impl Romst {
             let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.into_iter().map(|db_rom| {
                 db_rom.file
             }).collect();
+            let device_refs = reader.get_devices_for_game(game_name.as_ref())?;
             match reader.get_game(game_name.as_ref()) {
                 Some(game) => {
-                    games.push(GameSet::new(game, roms, vec![], vec![]));
+                    games.push(GameSet::new(game, roms, vec![], vec![], device_refs.dependencies));
                 }
                 None => {
                     error!("Game {} not found", game_name.as_ref())
@@ -158,6 +159,26 @@ impl Romst {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         reader.get_romset_shared_roms(game_name.as_ref(), rom_mode)
+    }
+
+    pub fn get_romset_dependencies<S>(db_file: S, game_name: S, rom_mode: RomsetMode) -> Result<SetDependencies> where S: AsRef<str> {
+        let conn = Romst::get_r_connection(db_file)?;
+        let reader = Romst::get_data_reader(&conn)?;
+        let mut result = reader.get_devices_for_game(game_name.as_ref())?;
+
+        // If we are in split mode, we add the parent as a dependency
+        match rom_mode {
+            RomsetMode::Split => {
+                if let Some(game) = reader.get_game(game_name.as_ref()) {
+                    if let Some(clone_of) = game.clone_of {
+                        result.dependencies.push(clone_of);
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Ok(result)
     }
 
     pub fn get_db_info<S>(db_file: S) -> Result<DBReport> where S: AsRef<str>{
