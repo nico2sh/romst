@@ -3,10 +3,10 @@ use std::{collections::HashSet, fmt::Display, iter::FromIterator};
 use anyhow::Result;
 use console::Style;
 use log::{debug, error, warn};
-use rusqlite::{Connection, ToSql, params};
+use rusqlite::{Connection, Row, ToSql, params};
 use serde::{Deserialize, Serialize};
 
-use crate::{RomsetMode, data::models::{disk::GameDisk, file::{DataFile, DataFileInfo, FileType::{self, Rom}}, game::Game}};
+use crate::{RomsetMode, data::models::{disk::GameDisk, file::{DataFile, DataFileInfo, FileType}, game::Game}};
 
 use super::{DataReader, DbDataEntry, FileCheckSearch, RomSearch, SetDependencies};
 
@@ -70,10 +70,43 @@ Rom status = row.get(6)?;
 Rom parent = row.get(7)?;
 Game clone_of = row.get(8)?;
 Game rom_of = row.get(9)?;
-Rom id = row.get(10)?;
+Game source_file = row.get(10)?;
+Game sample_of = row.get(11)?;
+Game info_desc = row.get(12)?;
+Game info_year = row.get(13)?;
+Game info_manuf = row.get(14)?;
+Rom id = row.get(15)?;
 */
-const ROMS_QUERY: &str = "SELECT DISTINCT game_roms.game_name, game_roms.name as rom_name, roms.sha1, roms.md5, roms.crc, roms.size, game_roms.status, game_roms.parent, games.clone_of, games.rom_of, roms.id
+const ROMS_QUERY: &str = "SELECT DISTINCT game_roms.game_name, game_roms.name as rom_name, roms.sha1, roms.md5, roms.crc, roms.size, game_roms.status, game_roms.parent, games.clone_of, games.rom_of, games.source_file, games.sample_of, games.info_desc, games.info_year, games.info_manuf, roms.id
                 FROM game_roms JOIN roms ON game_roms.rom_id = roms.id JOIN games ON game_roms.game_name = games.name";
+
+fn process_row(row: &Row) -> Result<(Game, DbDataEntry<DataFile>, Option<String>), rusqlite::Error> {
+    let mut game = Game::new(row.get(0)?);
+    game.clone_of = row.get(8)?;
+    game.rom_of = row.get(9)?;
+    game.source_file = row.get(10)?;
+    game.sample_of = row.get(11)?;
+    game.info_description = row.get(12)?;
+    game.info_year = row.get(13)?;
+    game.info_manufacturer = row.get(14)?;
+
+    let mut data_file_info = DataFileInfo::new(FileType::Rom);
+    data_file_info.sha1 = row.get(2)?;
+    data_file_info.md5 = row.get(3)?;
+    data_file_info.crc = row.get(4)?;
+    data_file_info.size = row.get(5)?;
+
+    let rom_name: String = row.get(1)?;
+    let mut data_file = DataFile::new(rom_name, data_file_info);
+    data_file.status = row.get(6)?;
+
+    let rom_id = row.get(15)?;
+    let db_entry = DbDataEntry::new(rom_id, data_file);
+
+    let rom_parent: Option<String> = row.get(7)?;
+
+    Ok((game, db_entry, rom_parent))
+}
 
 #[derive(Debug)]
 pub struct DBReader<'d> {
@@ -138,26 +171,17 @@ impl <'d> DBReader <'d>{
         // We do a query with all the roms we received, the result will return all sets associated with these roms
         let query = ROMS_QUERY.to_string() + " WHERE game_roms.rom_id IN (" + &ids_cond + ") ORDER BY game_roms.game_name;";
 
-        type QueryResult = (String, Option<String>, Option<String>, Option<String>, Option<u32>, Option<String>, Option<String>, Option<String>, u32);
+        type QueryResult = (Game, DbDataEntry<DataFile>, Option<String>);
         let mut roms_stmt = self.conn.prepare(&query)?;
         let roms_rows = roms_stmt.query_map::<QueryResult, _, _>(params, |row| {
-            // We get the rows
-            Ok((row.get(0)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(7)?,
-                row.get(8)?,
-                row.get(9)?,
-                row.get(10)?))
-        })?.filter_map(|rows| {
+            process_row(row)
+        })?.filter_map(|result| {
             // We filter the erros
-            rows.ok()
-        }).flat_map(|rows| {
+            result.ok()
+        }).flat_map(|results| {
             // Since we can have more than one rom id with different name, we create a vec with each name
             // Most of the times it will be only one
-            let rom_id: u32 = rows.8;
+            let rom_id: u32 = results.1.id;
             db_roms.iter().filter_map(|db_rom| {
                 if rom_id == db_rom.id {
                     Some(db_rom.file.name.clone())
@@ -165,42 +189,36 @@ impl <'d> DBReader <'d>{
                     None
                 }
             }).map(|file_name| {
-                let mut data_file_info = DataFileInfo::new(FileType::Rom);
-                data_file_info.sha1 = rows.1.to_owned();
-                data_file_info.md5 = rows.2.to_owned();
-                data_file_info.crc = rows.3.to_owned();
-                data_file_info.size = rows.4.to_owned();
-                let data_file = DataFile::new(file_name, data_file_info);
-                (rows.0.to_owned(),
+                let game = results.0.clone();
+                let mut data_file = results.1.file.clone();
+                data_file.name = file_name;
+
+                (game,
                 DbDataEntry::new(rom_id, data_file),
-                rows.5.to_owned(),
-                rows.6.to_owned(),
-                rows.7.to_owned())
+                results.2.clone())
             }).collect::<Vec<_>>()
         }).collect::<Vec<_>>();
 
         let mut result = RomSearch::new();
         for item in roms_rows {
-            let game_name = item.0;
+            let game = item.0;
             let rom = item.1;
-            let game_parent: Option<String> = item.2;
-            let _clone_of: Option<String> = item.3;
-            let rom_of: Option<String> = item.4;
+            let game_parent = item.2;
 
             match rom_mode {
                 RomsetMode::Merged => {
-                    if let Some(game_parent_name) = rom_of {
+                    if let Some(game_parent_name) = game.rom_of {
                         result.add_file_for_set(game_parent_name, rom);
                     } else {
-                        result.add_file_for_set(game_name, rom);
+                        result.add_file_for_set(game.name, rom);
                     }
                 }
                 RomsetMode::NonMerged => {
-                    result.add_file_for_set(game_name, rom);
+                    result.add_file_for_set(game.name, rom);
                 }
                 RomsetMode::Split => {
                     if game_parent == None {
-                        result.add_file_for_set(game_name, rom);
+                        result.add_file_for_set(game.name, rom);
                     }
                 }
             }
@@ -389,18 +407,8 @@ impl <'d> DataReader for DBReader<'d> {
 
         let mut roms_stmt = self.conn.prepare(&query)?;
         let roms_rows = roms_stmt.query_map(params![ game_name ], |row| {
-            let data_file = DataFile {
-                name: row.get(1)?,
-                info: DataFileInfo {
-                    file_type: Rom,
-                    sha1: row.get(2)?,
-                    md5: row.get(3)?,
-                    crc: row.get(4)?,
-                    size: row.get(5)?,
-                },
-                status: row.get(6)?
-            };
-            Ok(DbDataEntry::new(row.get(10)?, data_file))
+            let r = process_row(row)?;
+            Ok(r.1)
         })?.filter_map(|row| row.ok());
 
         let roms: HashSet<DbDataEntry<DataFile>> = Vec::from_iter(roms_rows).drain(..).collect();
