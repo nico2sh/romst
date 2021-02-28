@@ -119,6 +119,7 @@ fn create_matches() -> ArgMatches {
             .about("Checks several files or a directory")
             .arg(Arg::new("source")
                 .about("A directory or list of files to check")
+                .long("source")
                 .short('s')
                 .takes_value(true)
                 .multiple(true)
