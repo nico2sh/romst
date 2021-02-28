@@ -2,13 +2,14 @@ use std::{collections::{HashMap, HashSet, hash_map::Entry}, fmt::Display};
 
 use log::debug;
 
-use crate::{RomsetMode, data::models::{self, file::DataFile}};
+use crate::{RomsetMode, data::models::{self, file::DataFile, game::Game}};
 
 #[derive(Debug)]
 pub struct ScanReport {
     root_directory: Option<String>,
     rom_mode: RomsetMode,
     pub sets: HashMap<String, SetReport>,
+    pub ignored: Vec<String>,
 }
 
 impl Display for ScanReport {
@@ -18,6 +19,14 @@ impl Display for ScanReport {
         }
         writeln!(f, "Mode: {}", self.rom_mode)?;
         writeln!(f)?;
+        if !self.ignored.is_empty() {
+            writeln!(f, "Ignored:")?;
+            for file in &self.ignored {
+                writeln!(f, "- {}", file)?;
+            }
+            writeln!(f)?;
+        }
+
         for set in &self.sets {
             let s = set.1; 
             writeln!(f, "{}", s)?;
@@ -30,8 +39,13 @@ impl ScanReport {
     pub fn new(root_directory: Option<String>, rom_mode: RomsetMode) -> Self {
         Self {
             root_directory,
-            rom_mode, sets: HashMap::new()
+            rom_mode, sets: HashMap::new(),
+            ignored: vec![]
         }
+    }
+
+    pub fn add_ignored<S>(&mut self, file: S) where S: Into<String> {
+        self.ignored.push(file.into());
     }
 
     pub fn add_rom_for_set<S>(&mut self, set_name: S, location: RomLocation, rom: DataFile) where S: AsRef<str> {
@@ -92,11 +106,17 @@ impl ScanReport {
             set.roms_to_spare.insert(rom);
         });
     }
+
+    pub fn reference_with_game(&mut self, game: Game) {
+        let set_name = &game.name;
+        let set = self.sets.entry(set_name.to_owned()).or_insert_with(|| SetReport::new(set_name));
+        set.ref_game(game);
+    }
 }
 
 #[derive(Debug)]
 pub struct SetReport {
-    pub name: String,
+    pub reference: SetReference,
     pub in_file: bool,
     pub roms_available: HashMap<DataFile, RomLocatedAt>,
     pub roms_missing: HashSet<DataFile>,
@@ -105,9 +125,42 @@ pub struct SetReport {
     pub unknown: Vec<DataFile>
 }
 
+// A set may be associated with a game based on its name, or just contain roms if there are no matches
+#[derive(Debug)]
+pub enum SetReference {
+    FileName(String),
+    Game(Game)
+}
+
+impl SetReference {
+    pub fn get_name(&self) -> &str {
+        match self {
+            SetReference::FileName(name) => {
+                name
+            }
+            SetReference::Game(game) => {
+                &game.name
+            }
+        }
+    }
+}
+
+impl Display for SetReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SetReference::FileName(name) => {
+                writeln!(f, "File name: {}", name)
+            }
+            SetReference::Game(game) => {
+                writeln!(f, "{}", game)
+            }
+        }
+    }
+}
+
 impl Display for SetReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Set Name: {}", self.name)?;
+        write!(f, "Set - {}", self.reference)?;
         let file_status = if self.in_file {
             " [in file]"
         } else {
@@ -187,7 +240,7 @@ impl Display for SetStatus {
 impl SetReport {
     pub fn new<S>(name: S) -> Self where S: Into<String> {
         Self {
-            name: name.into(),
+            reference: SetReference::FileName(name.into()),
             in_file: false,
             roms_available: HashMap::new(),
             roms_missing: HashSet::new(),
@@ -195,6 +248,10 @@ impl SetReport {
             roms_to_spare: HashSet::new(),
             unknown: vec![]
         }
+    }
+
+    pub fn ref_game(&mut self, game: Game) {
+        self.reference = SetReference::Game(game)
     }
 
     pub fn is_complete(&self) -> SetStatus {
@@ -219,10 +276,10 @@ impl SetReport {
 
     fn add_set_rom(&mut self, location: RomLocation, rom: DataFile) {
         if self.roms_missing.remove(&rom) {
-            debug!("Removed from set {} the file as missing {}", self.name, &rom);
+            debug!("Removed from set {} the file as missing {}", self.reference, &rom);
         }
 
-        let in_set = models::does_file_belong_to_set(location.file.as_str(), self.name.as_str());
+        let in_set = models::does_file_belong_to_set(location.file.as_str(), self.reference.get_name());
         let rom_name = rom.name.clone();
         match self.roms_available.entry(rom) {
             Entry::Occupied(mut entry) => {

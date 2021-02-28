@@ -189,8 +189,7 @@ impl<R: DataReader> Reporter<R> {
                     }
                 }
                 ReportMessageContent::FoundNotValid => {
-                    // warn!("File `{}` is not a valid file", file_name);
-                    // TODO: Unknown file, fix. FileReport type wrong?
+                    scan_report.add_ignored(file_name);
                     if let Some(reporter) = self.reporter.as_mut() {
                         reporter.update_report_ignored(1);
                     };
@@ -224,7 +223,10 @@ impl<R: DataReader> Reporter<R> {
             let roms = entry.1;
 
             // We fetch all roms for the set we are analyzing
-            let db_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
+            let db_game_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
+            let game = db_game_roms.0;
+            let db_roms = db_game_roms.1;
+            scan_report.reference_with_game(game);
 
             roms.get_roms_included().into_iter().for_each(|rom| {
                 // We look for coincidences in the database for the roms found for that set
@@ -349,7 +351,7 @@ mod tests {
                     }
                 }
             });
-            set.name == set_name &&
+            set.reference.get_name() == set_name &&
             set.roms_unneeded.len() == roms_unneeded &&
             set.roms_to_spare.len() == roms_to_spare &&
             have == roms_have &&

@@ -24,6 +24,21 @@ impl <T> Display for DbDataEntry<T> where T: Display {
     }
 }
 
+#[derive(Debug)]
+pub struct SetDependencies {
+    set_name: String,
+    pub dependencies: Vec<String>
+}
+
+impl SetDependencies {
+    pub fn new<S>(set_name: S) -> Self where S: Into<String> {
+        Self {
+            set_name: set_name.into(),
+            dependencies: vec![],
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RomSearch {
     searched_roms: HashSet<Rc<DbDataEntry<DataFile>>>,
@@ -154,14 +169,15 @@ impl FileCheckSearch {
 pub trait DataReader {
     fn get_game<S>(&self, game_name: S) -> Option<Game> where S: AsRef<str> + rusqlite::ToSql;
     /// Returns all the roms for a specific romset
-    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<Vec<DbDataEntry<DataFile>>> where S: AsRef<str> + rusqlite::ToSql;
+    fn get_romset_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<(Game, Vec<DbDataEntry<DataFile>>)> where S: AsRef<str> + rusqlite::ToSql;
     fn get_game_set<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<GameSet> where S: AsRef<str> + rusqlite::ToSql {
         match self.get_game(&game_name) {
             Some(game) => {
-                let roms = self.get_romset_roms(game_name, rom_mode)?.into_iter().map(|db_rom| {
+                let roms = self.get_romset_roms(game_name.as_ref(), rom_mode)?.1.into_iter().map(|db_rom| {
                     db_rom.file
                 }).collect();
-                let game_set = GameSet::new(game, roms, vec![], vec![]);
+                let device_refs = self.get_devices_for_game(game_name.as_ref())?;
+                let game_set = GameSet::new(game, roms, vec![], vec![], device_refs.dependencies);
                 Ok(game_set)
             }
             None => err!(RomstError::GenericError{ message: format!("Game {} not found", game_name.as_ref()) }),
@@ -176,7 +192,7 @@ pub trait DataReader {
     /// Finds all romsets associated with the roms sent
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch>;
 
-    fn get_devices_for_game<S>(&self, game_name: S) -> Result<Vec<String>> where S: AsRef<str> + rusqlite::ToSql;
+    fn get_devices_for_game<S>(&self, game_name: S) -> Result<SetDependencies> where S: AsRef<str> + rusqlite::ToSql;
 
     fn get_file_checks(&self) -> Result<FileCheckSearch>;
 }
