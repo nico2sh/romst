@@ -132,7 +132,7 @@ impl Romst {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         for game_name in game_names {
-            let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.into_iter().map(|db_rom| {
+            let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.1.into_iter().map(|db_rom| {
                 db_rom.file
             }).collect();
             let device_refs = reader.get_devices_for_game(game_name.as_ref())?;
