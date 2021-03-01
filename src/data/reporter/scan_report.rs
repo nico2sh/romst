@@ -112,6 +112,11 @@ impl ScanReport {
         let set = self.sets.entry(set_name.to_owned()).or_insert_with(|| SetReport::new(set_name));
         set.ref_game(game);
     }
+
+    pub fn add_dependencies<S>(&mut self, set_name: S, dependencies: Vec<String>) where S: AsRef<str> {
+        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert_with(|| SetReport::new(set_name.as_ref()));
+        set.device_dependencies.extend(dependencies.into_iter());
+    }
 }
 
 #[derive(Debug)]
@@ -122,6 +127,7 @@ pub struct SetReport {
     pub roms_missing: HashSet<DataFile>,
     pub roms_unneeded: HashSet<DataFile>, // BadDumps
     pub roms_to_spare: HashSet<DataFile>,
+    pub device_dependencies: HashSet<String>,
     pub unknown: Vec<DataFile>
 }
 
@@ -167,6 +173,13 @@ impl Display for SetReport {
             ""
         };
         writeln!(f, "Status: {}{}", self.is_complete(), file_status)?;
+
+        if !self.device_dependencies.is_empty() {
+            writeln!(f, "Depends on:")?;
+            for dep in &self.device_dependencies {
+                writeln!(f, " - {}", dep)?;
+            }
+        }
         if !self.roms_available.is_empty() {
             writeln!(f, "Roms Available")?;
             for available in &self.roms_available {
@@ -246,6 +259,7 @@ impl SetReport {
             roms_missing: HashSet::new(),
             roms_unneeded: HashSet::new(),
             roms_to_spare: HashSet::new(),
+            device_dependencies: HashSet::new(),
             unknown: vec![]
         }
     }
