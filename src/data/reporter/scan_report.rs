@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet, hash_map::Entry}, fmt::Display};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, Utc};
 use anyhow::Result;
 use anyhow::anyhow;
 
@@ -22,6 +22,7 @@ impl Display for ScanReport {
         if let Some(path) = &self.root_directory {
             writeln!(f, "Scanned dir: {}", path)?;
         }
+        writeln!(f, "Date of the report: {}", self.date_time)?;
         writeln!(f, "Mode: {}", self.rom_mode)?;
         writeln!(f)?;
         if !self.ignored.is_empty() {
