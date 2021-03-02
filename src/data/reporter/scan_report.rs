@@ -1,12 +1,17 @@
 use std::{collections::{HashMap, HashSet, hash_map::Entry}, fmt::Display};
+use serde::{Deserialize, Serialize};
+use chrono::{DateTime, FixedOffset, Utc};
+use anyhow::Result;
+use anyhow::anyhow;
 
 use log::debug;
 
 use crate::{RomsetMode, data::models::{self, file::DataFile, game::Game}};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ScanReport {
     root_directory: Option<String>,
+    date_time: String,
     rom_mode: RomsetMode,
     pub sets: HashMap<String, SetReport>,
     pub ignored: Vec<String>,
@@ -37,11 +42,20 @@ impl Display for ScanReport {
 
 impl ScanReport {
     pub fn new(root_directory: Option<String>, rom_mode: RomsetMode) -> Self {
+        let now = Utc::now();
+        
         Self {
             root_directory,
+            date_time: now.to_rfc3339(),
             rom_mode, sets: HashMap::new(),
             ignored: vec![]
         }
+    }
+
+    pub fn get_date_time(&self) -> Result<DateTime<Utc>> {
+        DateTime::parse_from_rfc3339(&self.date_time)
+            .map_err(|e| anyhow!(e))
+            .map(|t| t.with_timezone(&Utc))
     }
 
     pub fn add_ignored<S>(&mut self, file: S) where S: Into<String> {
@@ -119,7 +133,7 @@ impl ScanReport {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SetReport {
     pub reference: SetReference,
     pub in_file: bool,
@@ -132,7 +146,7 @@ pub struct SetReport {
 }
 
 // A set may be associated with a game based on its name, or just contain roms if there are no matches
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum SetReference {
     FileName(String),
     Game(Game)
@@ -220,7 +234,7 @@ impl Display for SetReport {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum RomLocatedAt {
     InSet,
     InSetWrongName(String),
@@ -364,7 +378,7 @@ impl SetReport {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RomLocation {
     file: String,
     with_name: String,

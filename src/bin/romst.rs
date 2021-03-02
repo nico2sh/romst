@@ -126,7 +126,14 @@ fn create_matches() -> ArgMatches {
                 .required(true))
             .arg(arg_db.clone())
             .arg(arg_set_mode.clone())
-            .arg(arg_format.clone()))
+            .arg(arg_format.clone())
+            .arg(Arg::new("report")
+                .about("Destination file for the report (if not specified, prints in text format on screen)")
+                .long("report")
+                .short('r')
+                .takes_value(true)
+                .required(false)
+                .conflicts_with("format")))
         .get_matches();
 
         matches
@@ -175,15 +182,27 @@ fn check(matches: &ArgMatches) {
         None => RomsetMode::default() 
     };
 
-    let reporter = ReportReporterSysOut::new();
-    match Romst::get_report(db, files, set_mode, Some(reporter)) {
+    let reporter = Some(ReportReporterSysOut::new());
+    match Romst::get_report(db, files, set_mode, reporter) {
         Ok(report) => {
-            println!("{}", report);
+            if let Some(dest_file) = matches.value_of("report") {
+                match Romst::save_report(dest_file, report) {
+                    Ok(_) => {
+                        println!("{} report saved",
+                            Style::new().green().apply_to("SUCCESS"));
+                    }
+                    Err(e) => {
+                        println!("{} saving a report.\n{}",
+                            Style::new().red().apply_to("ERROR"), e);
+                    }
+                }
+            } else {
+                print_from_format(matches, report);
+            }
         }
         Err(e) => {
             println!("{} generating a report.\n{}",
-                Style::new().red().apply_to("ERROR"),
-                e);
+                Style::new().red().apply_to("ERROR"), e);
         }
     }
 }

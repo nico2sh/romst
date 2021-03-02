@@ -8,7 +8,7 @@ use console::Style;
 use data::{importer::{DatImporter, DatImporterReporter}, models::set::GameSet, reader::{DataReader, RomSearch, SetDependencies, sqlite::{DBReader, DBReport}}, reporter::{ReportReporter, Reporter, scan_report::ScanReport}, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use std::{fmt::Display, path::Path, str::FromStr};
+use std::{fmt::Display, fs::File, io::Write, path::Path, str::FromStr};
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
@@ -205,4 +205,13 @@ impl Romst {
              });
         report
     }
+
+    pub fn save_report<S>(output_file: S, report: ScanReport) -> Result<()> where S: AsRef<str> {
+        let encoded: Vec<u8> = bincode::serialize(&report)?;
+        let mut file = File::create(output_file.as_ref())?;
+        file.write_all(&encoded)?;
+
+        Ok(())
+    }
+
 }
