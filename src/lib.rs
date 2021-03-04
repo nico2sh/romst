@@ -8,7 +8,7 @@ use console::Style;
 use data::{importer::{DatImporter, DatImporterReporter}, models::set::GameSet, reader::{DataReader, RomSearch, SetDependencies, sqlite::{DBReader, DBReport}}, reporter::{ReportReporter, Reporter, scan_report::ScanReport}, writer::sqlite::DBWriter};
 use log::{info, error};
 use rusqlite::{Connection, OpenFlags};
-use std::{fmt::Display, path::Path, str::FromStr};
+use std::{fmt::Display, fs::File, io::Write, path::Path, str::FromStr};
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
@@ -187,13 +187,13 @@ impl Romst {
         reader.get_stats()
     }
 
-    pub fn get_report<R, S>(db_file: S, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode, reporter: Option<R>) -> Result<ScanReport> where R: ReportReporter + 'static, S: AsRef<str> {
+    pub fn get_report<R, S>(db_file: S, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode, progress_reporter: Option<R>) -> Result<ScanReport> where R: ReportReporter + 'static, S: AsRef<str> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
 
-        let mut report = Reporter::new(reader);
-        if let Some(reporter) = reporter {
-            report.add_reporter(reporter);
+        let mut reporter = Reporter::new(reader);
+        if let Some(progress_reporter) = progress_reporter {
+            reporter.add_reporter(progress_reporter);
         }
 
         let report = tokio::runtime::Builder::new_multi_thread()
@@ -201,8 +201,17 @@ impl Romst {
             .build()
             .unwrap()
             .block_on(async { 
-                report.check(file_paths, rom_mode).await
+                reporter.check(file_paths, rom_mode).await
              });
         report
     }
+
+    pub fn save_report<S>(output_file: S, report: ScanReport) -> Result<()> where S: AsRef<str> {
+        let encoded: Vec<u8> = bincode::serialize(&report)?;
+        let mut file = File::create(output_file.as_ref())?;
+        file.write_all(&encoded)?;
+
+        Ok(())
+    }
+
 }
