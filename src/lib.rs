@@ -187,13 +187,13 @@ impl Romst {
         reader.get_stats()
     }
 
-    pub fn get_report<R, S>(db_file: S, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode, reporter: Option<R>) -> Result<ScanReport> where R: ReportReporter + 'static, S: AsRef<str> {
+    pub fn get_report<R, S>(db_file: S, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode, progress_reporter: Option<R>) -> Result<ScanReport> where R: ReportReporter + 'static, S: AsRef<str> {
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
 
-        let mut report = Reporter::new(reader);
-        if let Some(reporter) = reporter {
-            report.add_reporter(reporter);
+        let mut reporter = Reporter::new(reader);
+        if let Some(progress_reporter) = progress_reporter {
+            reporter.add_reporter(progress_reporter);
         }
 
         let report = tokio::runtime::Builder::new_multi_thread()
@@ -201,7 +201,7 @@ impl Romst {
             .build()
             .unwrap()
             .block_on(async { 
-                report.check(file_paths, rom_mode).await
+                reporter.check(file_paths, rom_mode).await
              });
         report
     }
