@@ -1,12 +1,17 @@
 use std::{collections::{HashMap, HashSet, hash_map::Entry}, fmt::Display};
+use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
+use anyhow::Result;
+use anyhow::anyhow;
 
 use log::debug;
 
 use crate::{RomsetMode, data::models::{self, file::DataFile, game::Game}};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ScanReport {
     root_directory: Option<String>,
+    date_time: String,
     rom_mode: RomsetMode,
     pub sets: HashMap<String, SetReport>,
     pub ignored: Vec<String>,
@@ -17,6 +22,7 @@ impl Display for ScanReport {
         if let Some(path) = &self.root_directory {
             writeln!(f, "Scanned dir: {}", path)?;
         }
+        writeln!(f, "Date of the report: {}", self.date_time)?;
         writeln!(f, "Mode: {}", self.rom_mode)?;
         writeln!(f)?;
         if !self.ignored.is_empty() {
@@ -37,11 +43,20 @@ impl Display for ScanReport {
 
 impl ScanReport {
     pub fn new(root_directory: Option<String>, rom_mode: RomsetMode) -> Self {
+        let now = Utc::now();
+        
         Self {
             root_directory,
+            date_time: now.to_rfc3339(),
             rom_mode, sets: HashMap::new(),
             ignored: vec![]
         }
+    }
+
+    pub fn get_date_time(&self) -> Result<DateTime<Utc>> {
+        DateTime::parse_from_rfc3339(&self.date_time)
+            .map_err(|e| anyhow!(e))
+            .map(|t| t.with_timezone(&Utc))
     }
 
     pub fn add_ignored<S>(&mut self, file: S) where S: Into<String> {
@@ -112,9 +127,14 @@ impl ScanReport {
         let set = self.sets.entry(set_name.to_owned()).or_insert_with(|| SetReport::new(set_name));
         set.ref_game(game);
     }
+
+    pub fn add_dependencies<S>(&mut self, set_name: S, dependencies: Vec<String>) where S: AsRef<str> {
+        let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert_with(|| SetReport::new(set_name.as_ref()));
+        set.device_dependencies.extend(dependencies.into_iter());
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SetReport {
     pub reference: SetReference,
     pub in_file: bool,
@@ -122,11 +142,12 @@ pub struct SetReport {
     pub roms_missing: HashSet<DataFile>,
     pub roms_unneeded: HashSet<DataFile>, // BadDumps
     pub roms_to_spare: HashSet<DataFile>,
+    pub device_dependencies: HashSet<String>,
     pub unknown: Vec<DataFile>
 }
 
 // A set may be associated with a game based on its name, or just contain roms if there are no matches
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum SetReference {
     FileName(String),
     Game(Game)
@@ -167,6 +188,13 @@ impl Display for SetReport {
             ""
         };
         writeln!(f, "Status: {}{}", self.is_complete(), file_status)?;
+
+        if !self.device_dependencies.is_empty() {
+            writeln!(f, "Depends on:")?;
+            for dep in &self.device_dependencies {
+                writeln!(f, " - {}", dep)?;
+            }
+        }
         if !self.roms_available.is_empty() {
             writeln!(f, "Roms Available")?;
             for available in &self.roms_available {
@@ -207,7 +235,7 @@ impl Display for SetReport {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum RomLocatedAt {
     InSet,
     InSetWrongName(String),
@@ -246,6 +274,7 @@ impl SetReport {
             roms_missing: HashSet::new(),
             roms_unneeded: HashSet::new(),
             roms_to_spare: HashSet::new(),
+            device_dependencies: HashSet::new(),
             unknown: vec![]
         }
     }
@@ -350,7 +379,7 @@ impl SetReport {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RomLocation {
     file: String,
     with_name: String,

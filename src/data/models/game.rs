@@ -14,7 +14,18 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(name: String) -> Self { Self { name, clone_of: None, rom_of: None, source_file: None, sample_of: None, info_description: None, info_year: None, info_manufacturer: None } }
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            clone_of: None,
+            rom_of: None,
+            source_file: None,
+            sample_of: None,
+            info_description: None,
+            info_year: None,
+            info_manufacturer: None
+        }
+    }
 }
 
 impl fmt::Display for Game {
@@ -34,6 +45,11 @@ impl fmt::Display for Game {
             game_data.push(format!("Sample of: {}", sample_of))
         }
 
-        write!(f, "Game Name: {} ({})", self.name, game_data.join(", "))
+        let name_and_desc = match self.info_description {
+            Some(ref desc) => { format!("[{}] {}", self.name, desc) }
+            None => { format!("[{}]", self.name) }
+        };
+
+        write!(f, "{} ({})", name_and_desc, game_data.join(", "))
     }
 }
