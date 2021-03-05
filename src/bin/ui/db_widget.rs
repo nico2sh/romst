@@ -16,8 +16,31 @@ enum OptionSelected {
     Err(Error)
 }
 
+enum DBListEntry {
+    Import, 
+    File(DBFileEntry)
+}
+
+impl DBListEntry {
+    fn get_entry_title(&self) -> String {
+        match self {
+            DBListEntry::Import => "[IMPORT DAT FILE]".to_string(),
+            DBListEntry::File(entry) => entry.file_name.clone()
+        }
+    }
+}
+
+struct DBFileEntry {
+    file_name: String,
+    path: String
+}
+
+impl DBFileEntry {
+    fn new(file_name: String, path: String) -> Self { Self { file_name, path } }
+}
+
 pub struct DBWidget {
-    db_list: Vec<String>,
+    db_list: Vec<DBListEntry>,
     selected: ListState,
     option_selected: OptionSelected
 }
@@ -36,11 +59,11 @@ impl DBWidget {
 
     fn get_file_list<'a>(&self) -> Vec<ListItem<'a>> {
         self.db_list.iter().map(|s| {
-            self.get_list_item(s)
+            self.get_list_item(s.get_entry_title().as_str())
         }).collect::<Vec<_>>()
     }
 
-    fn get_db_list() -> Result<Vec<String>> {
+    fn get_db_list() -> Result<Vec<DBListEntry>> {
         let db_path = Path::new(BASE_PATH);
 
         if db_path.is_file() {
@@ -56,7 +79,14 @@ impl DBWidget {
                 Ok(f) => { 
                     let path = f.path();
                     if path.is_file() {
-                        f.file_name().to_str().map(|s| s.to_string() )
+                        let file_name = f.file_name().to_str().map(|s| s.to_string() );
+                        let path_string = path.to_str().map(|s| s.to_string() );
+
+                        if let (Some(l), Some(r)) = (file_name, path_string) {
+                            Some(DBListEntry::File(DBFileEntry::new(l, r)))
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
@@ -65,7 +95,7 @@ impl DBWidget {
             }
         }).collect::<Vec<_>>();
 
-        files.insert(0, "[IMPORT DAT FILE]".to_string());
+        files.insert(0, DBListEntry::Import);
 
         Ok(files)
     }
@@ -86,10 +116,6 @@ impl DBWidget {
             Cell::from(Span::raw(db_info.device_refs.to_string())),
         ])])
         .header(Row::new(vec![
-            Cell::from(Span::styled(
-                "File",
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
             Cell::from(Span::styled(
                 "Games",
                 Style::default().add_modifier(Modifier::BOLD),
@@ -119,11 +145,11 @@ impl DBWidget {
                 .border_type(BorderType::Plain),
         )
         .widths(&[
-            Constraint::Percentage(10),
-            Constraint::Percentage(10),
-            Constraint::Percentage(10),
-            Constraint::Percentage(10),
-            Constraint::Percentage(10),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
         ]);
 
         return db_detail;
@@ -136,6 +162,7 @@ impl DBWidget {
             Spans::from(vec![Span::raw("")]),
             Spans::from(vec![Span::raw("a DAT file")]),
             Spans::from(vec![Span::raw("")]),
+            Spans::from(vec![Span::raw("(Work in progress)")]),
         ])
         .alignment(Alignment::Center)
         .block(
@@ -176,22 +203,26 @@ impl DBWidget {
 
     fn update_selected(&mut self) {
         if let Some(selected) = self.selected.selected() {
-            let option_selected = if selected == 0 {
-                OptionSelected::Import
-            } else {
-                if let Some(db) = self.db_list.get(selected) {
-                    match Romst::get_db_info(db) {
-                        Ok(info) => {
-                            OptionSelected::DbInfo(info)
-                        }
-                        Err(e) => {
-                            OptionSelected::Err(e.into())
+            let option_selected = if let Some(db_entry) = self.db_list.get(selected) {
+                match db_entry {
+                    DBListEntry::Import => {
+                        OptionSelected::Import
+                    }
+                    DBListEntry::File(file_entry) => {
+                        match Romst::get_db_info(&file_entry.path) {
+                            Ok(info) => {
+                                OptionSelected::DbInfo(info)
+                            }
+                            Err(e) => {
+                                OptionSelected::Err(e.into())
+                            }
                         }
                     }
-                } else {
-                    OptionSelected::Err(anyhow!("Unknown Error"))
                 }
+            } else {
+                OptionSelected::Err(anyhow!("Unknown Error"))
             };
+
             self.option_selected = option_selected;
         }
     }

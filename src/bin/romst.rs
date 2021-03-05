@@ -66,7 +66,7 @@ fn create_matches() -> ArgMatches {
             .about("Loads the UI"))
         .subcommand(App::new("import")
             .about("Import a DAT file into the database")
-            .arg(Arg::new("file")
+            .arg(Arg::new("source")
                 .about("Source DAT file")
                 .long("source")
                 .short('s')
