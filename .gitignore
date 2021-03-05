@@ -4,5 +4,6 @@
 /*.dat
 /*.xml
 /*.db
+/db/**
 .DS_Store
 ahem.txt
