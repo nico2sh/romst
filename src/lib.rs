@@ -1,4 +1,4 @@
-mod data;
+pub mod data;
 mod error;
 mod filesystem;
 mod macros;

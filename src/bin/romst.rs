@@ -6,6 +6,8 @@ use romst::{RomsetMode, Romst, sysout::{DatImporterReporterSysOut, ReportReporte
 use serde::Serialize;
 use std::{fmt::Display, path::Path, str::FromStr};
 
+mod ui;
+
 const DB_EXTENSION: &str = "rst";
 
 enum OutputFormat {
@@ -60,6 +62,8 @@ fn create_matches() -> ArgMatches {
     let matches = App::new("romst")
         .version("0.1b")
         .author("Nico H. <mail@nico2sh.com>")
+        .subcommand(App::new("ui")
+            .about("Loads the UI"))
         .subcommand(App::new("import")
             .about("Import a DAT file into the database")
             .arg(Arg::new("file")
@@ -147,6 +151,7 @@ fn main() {
     let matches = create_matches();
 
     match matches.subcommand() {
+        Some(("ui", ui_matches)) => ui(ui_matches),
         Some(("import", import_matches)) => import(import_matches),
         Some(("info", info_matches)) => info(info_matches),
         Some(("check", check_matches)) => check(check_matches),
@@ -172,6 +177,16 @@ fn print_from_format<T: Serialize + Display>(matches: &ArgMatches, obj: T) {
         }
         OutputFormat::Plain => println!("{}", obj)
     };
+}
+
+fn ui(_matches: &ArgMatches) {
+    match ui::render() {
+        Ok(_) => {}
+        Err(e) => {
+            println!("{} Loading the UI.\n{}",
+                Style::new().red().apply_to("ERROR"), e);
+        }
+    }
 }
 
 fn check(matches: &ArgMatches) {
