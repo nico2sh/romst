@@ -37,7 +37,7 @@ impl <T: Backend> RomstWidget<T> for HomeWidget {
         frame.render_widget(paragraph, area);
     }
 
-    fn process_key(&mut self, event: crossterm::event::KeyEvent) {
+    fn process_key(&mut self, _event: crossterm::event::KeyEvent) {
 
     }
 }

@@ -1,4 +1,4 @@
-use tui::{Frame, backend::Backend, layout::Rect, style::{Color, Modifier, Style}, text::{Span, Spans}, widgets::{Block, Borders, Tabs, Widget}};
+use tui::{Frame, backend::Backend, layout::Rect, style::{Color, Modifier, Style}, text::{Span, Spans}, widgets::{Block, Borders, Tabs}};
 
 use super::{RomstWidget, db_widget::DBWidget, home_widget::HomeWidget};
 

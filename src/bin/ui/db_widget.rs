@@ -4,7 +4,7 @@ use anyhow::{Error, Result, anyhow};
 use crossterm::event::KeyCode;
 use romst::Romst;
 use romst::data::reader::sqlite::DBReport;
-use tui::{Frame, backend::Backend, layout::{Alignment, Constraint, Layout, Rect}, style::{Color, Modifier, Style}, text::{Span, Spans}, widgets::{Block, BorderType, Borders, Cell, List, ListItem, ListState, Paragraph, Row, Table, Widget}};
+use tui::{Frame, backend::Backend, layout::{Alignment, Constraint, Layout, Rect}, style::{Color, Modifier, Style}, text::{Span, Spans}, widgets::{Block, BorderType, Borders, Cell, List, ListItem, ListState, Paragraph, Row, Table}};
 
 use super::RomstWidget;
 

@@ -72,7 +72,7 @@ pub fn render() -> Result<()> {
                 )
                 .split(size);
 
-            let mut footer = Footer::new();
+            let footer = Footer::new();
             footer.render_in(frame, chunks[2]);
 
             tabs_menu.render_in(frame, chunks[0]);
