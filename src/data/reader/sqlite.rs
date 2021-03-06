@@ -6,7 +6,7 @@ use log::{debug, error, warn};
 use rusqlite::{Connection, Row, ToSql, params};
 use serde::{Deserialize, Serialize};
 
-use crate::{err, error::RomstError};
+use crate::{data::models::dat_info::DatInfo, err, error::RomstError};
 use crate::{RomsetMode, data::models::{disk::GameDisk, file::{DataFile, DataFileInfo, FileType}, game::Game}};
 
 use super::{DataReader, DbDataEntry, FileCheckSearch, RomSearch, SetDependencies};
@@ -32,6 +32,7 @@ impl <T> SearchEntryIds<T> {
 
 #[derive(Serialize, Deserialize)]
 pub struct DBReport {
+    pub dat_info: DatInfo,
     pub games: u32,
     pub roms: u32,
     pub roms_in_games: u32,
@@ -40,17 +41,12 @@ pub struct DBReport {
 }
 
 impl DBReport {
-    pub fn new() -> Self { Self { games: 0, roms: 0, roms_in_games: 0, samples: 0, device_refs: 0 } }
-}
-
-impl Default for DBReport {
-    fn default() -> Self {
-        DBReport::new()
-    }
+    pub fn new(dat_info: DatInfo) -> Self { Self { dat_info, games: 0, roms: 0, roms_in_games: 0, samples: 0, device_refs: 0 } }
 }
 
 impl Display for DBReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.dat_info)?;
         writeln!(f, "{}", Style::new().bold().yellow().apply_to("Database info"))?;
         writeln!(f, "- Games: {}", self.games)?;
         writeln!(f, "- Roms: {}", self.roms)?;
@@ -152,8 +148,34 @@ impl <'d> DBReader <'d>{
         Self { conn }
     }
 
+    pub fn get_dat_info(&self) -> Result<DatInfo> {
+        let mut stmt = self.conn.prepare("SELECT key, value FROM info;")?;
+        let mut name = String::new();
+        let mut description = String::new();
+        let mut version = String::new();
+        let mut extra_data = vec![];
+
+        let mut rows = stmt.query(params![])?;
+        while let Some(row) = rows.next()? {
+            let key: String = row.get(0)?;
+            let value: String = row.get(1)?;
+
+            match key.as_str() {
+                "name" => name = value,
+                "description" => description = value,
+                "version" => version = value,
+                _ => extra_data.push((key, value)),
+            }
+        }
+
+        let dat_info = DatInfo::new(name, description, version, extra_data);
+
+        Ok(dat_info)
+    }
+
     pub fn get_stats(&self) -> Result<DBReport> {
-        let mut db_report = DBReport::new();
+        let dat_info = self.get_dat_info()?;
+        let mut db_report = DBReport::new(dat_info);
 
         let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM games;")?;
         let games: u32 = stmt.query_row(params![], |row| {

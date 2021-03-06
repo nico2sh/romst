@@ -181,9 +181,8 @@ impl <'d> DBWriter<'d> {
         self.remove_table_if_exist("info")?;
         self.conn.execute(
             "CREATE TABLE info (
-                name        TEXT,
-                description TEXT,
-                version     TEXT);", 
+                key     TEXT,
+                value   TEXT);", 
             params![])?;
 
         Ok(())
@@ -593,6 +592,33 @@ impl <'d> DataWriter for DBWriter<'d> {
                 debug!("Updated {} rows, should be only 1 for game {}, rom_id {}, with parent {}, unless is a 'nodump'", result, game_name, rom_id, parent);
             }
         }
+        tx.commit()?;
+
+        Ok(())
+    }
+
+    fn on_dat_info(&mut self, dat_info: crate::data::models::dat_info::DatInfo) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        // We insert the common fields
+        if !dat_info.name.is_empty() {
+            tx.execute("INSERT INTO info (key, value) VALUES (?1, ?2);",
+                params!["name", dat_info.name])?;
+        }
+        if !dat_info.description.is_empty() {
+            tx.execute("INSERT INTO info (key, value) VALUES (?1, ?2);",
+                params!["description", dat_info.description])?;
+        }
+        if !dat_info.version.is_empty() {
+            tx.execute("INSERT INTO info (key, value) VALUES (?1, ?2);",
+                params!["version", dat_info.version])?;
+        }
+
+        // We insert the rest
+        for key_value in dat_info.extra_data {
+            tx.execute("INSERT INTO info (key, value) VALUES (?1, ?2);",
+                params![key_value.0, key_value.1])?;
+        }
+
         tx.commit()?;
 
         Ok(())

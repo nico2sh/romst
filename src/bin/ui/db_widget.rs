@@ -4,7 +4,7 @@ use anyhow::{Error, Result, anyhow};
 use crossterm::event::KeyCode;
 use romst::Romst;
 use romst::data::reader::sqlite::DBReport;
-use tui::{Frame, backend::Backend, layout::{Alignment, Constraint, Layout, Rect}, style::{Color, Modifier, Style}, text::{Span, Spans}, widgets::{Block, BorderType, Borders, Cell, List, ListItem, ListState, Paragraph, Row, Table}};
+use tui::{Frame, backend::Backend, layout::{Alignment, Constraint, Layout, Rect}, style::{Color, Modifier, Style}, text::{Span, Spans}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap}};
 
 use super::RomstWidget;
 
@@ -107,52 +107,51 @@ impl DBWidget {
         )]))
     }
 
-    fn get_db_detail_widget<'a>(db_info: &DBReport) -> Table<'a> {
-        let db_detail = Table::new(vec![Row::new(vec![
-            Cell::from(Span::raw(db_info.games.to_string())),
-            Cell::from(Span::raw(db_info.roms.to_string())),
-            Cell::from(Span::raw(db_info.roms_in_games.to_string())),
-            Cell::from(Span::raw(db_info.samples.to_string())),
-            Cell::from(Span::raw(db_info.device_refs.to_string())),
-        ])])
-        .header(Row::new(vec![
-            Cell::from(Span::styled(
-                "Games",
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            Cell::from(Span::styled(
-                "Roms",
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            Cell::from(Span::styled(
-                "Roms in Games",
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            Cell::from(Span::styled(
-                "Samples",
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-            Cell::from(Span::styled(
-                "Device Refs",
-                Style::default().add_modifier(Modifier::BOLD),
-            )),
-        ]))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::White))
-                .title("Detail")
-                .border_type(BorderType::Plain),
-        )
-        .widths(&[
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
+    fn get_db_detail_widget<'a>(db_info: &'a DBReport) -> Paragraph<'a> {
+        let mut text = vec![
+            Spans::from(vec![
+                Span::styled(format!("Name: {}", db_info.dat_info.name), Style::default().add_modifier(Modifier::BOLD)),
+            ]),
+            Spans::from(vec![
+                Span::styled("Description: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(&db_info.dat_info.description, Style::default()),
+            ]),
+            Spans::from(vec![
+                Span::styled("Version: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(&db_info.dat_info.version, Style::default()),
+            ]),
+        ];
+
+        for extra in &db_info.dat_info.extra_data {
+            text.push(
+                Spans::from(vec![
+                    Span::styled(format!("{}: ", &extra.0), Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(&extra.1),
+                ])
+            )
+        }
+
+        text.push(Spans::from(Span::raw("")));
+
+        text.extend(vec![
+            Spans::from(Span::raw(format!("Games: {}", db_info.games.to_string()))),
+            Spans::from(Span::raw(format!("Roms: {}", db_info.roms.to_string()))),
+            Spans::from(Span::raw(format!("Roms in Games: {}", db_info.roms_in_games.to_string()))),
+            Spans::from(Span::raw(format!("Samples: {}", db_info.samples.to_string()))),
+            Spans::from(Span::raw(format!("Device Refs: {}", db_info.device_refs.to_string()))),
         ]);
 
-        return db_detail;
+        let paragraph = Paragraph::new(text)
+        .block(
+            Block::default()
+            .borders(Borders::ALL)
+            .style(Style::default().fg(Color::White))
+            .title("Detail")
+            .border_type(BorderType::Rounded),
+        )
+        .wrap(Wrap { trim: true });
+
+        return paragraph;
     }
 
     fn get_import_db_widget<'a>() -> Paragraph<'a> {

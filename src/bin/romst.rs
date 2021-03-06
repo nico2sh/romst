@@ -1,4 +1,4 @@
-use clap::{App, Arg, ArgMatches};
+use clap::{App, Arg, ArgMatches, crate_version};
 use anyhow::{Result, anyhow};
 use console::Style;
 use env_logger::{Builder, Env, Target};
@@ -60,7 +60,7 @@ fn create_matches() -> ArgMatches {
         .required(false);
 
     let matches = App::new("romst")
-        .version("0.1b")
+        .version(crate_version!())
         .author("Nico H. <mail@nico2sh.com>")
         .subcommand(App::new("ui")
             .about("Loads the UI"))
