@@ -103,6 +103,14 @@ impl Romst {
         Ok(DBWriter::from_connection(conn, 500))
     }
 
+    // Returns a list of the games and their description
+    pub fn get_games<S>(db_file: S, rom_mode: RomsetMode) -> Result<Vec<(String, String)>> where S: AsRef<str> {
+        let conn = Romst::get_r_connection(db_file)?;
+        let reader = Romst::get_data_reader(&conn)?;
+
+        reader.get_game_list(rom_mode)
+    }
+
     pub fn import_dat<R, S>(input: S, output_file: S, overwrite: bool, reporter: Option<R>) -> Result<()> where R: DatImporterReporter + 'static, S: AsRef<str> {
         println!("Loading file: {}", Style::new().bold().apply_to(input.as_ref()));
         println!("Output: {}", Style::new().bold().apply_to(output_file.as_ref()));
@@ -127,12 +135,29 @@ impl Romst {
         Ok(())
     }
 
-    pub fn get_set_info<S>(db_file: S, game_names: Vec<S>, rom_mode: RomsetMode) -> Result<GameSetsInfo> where S: AsRef<str> {
+    pub fn get_set_info<S>(db_file: S, game_name: S, rom_mode: RomsetMode) -> Result<GameSet> where S: AsRef<str> {
+        let conn = Romst::get_r_connection(db_file)?;
+        let reader = Romst::get_data_reader(&conn)?;
+        let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.into_iter().map(|db_rom| {
+            db_rom.file
+        }).collect();
+        let device_refs = reader.get_devices_for_game(game_name.as_ref())?;
+        match reader.get_game(game_name.as_ref()) {
+            Some(game) => {
+                return Ok(GameSet::new(game, roms, vec![], vec![], device_refs.dependencies));
+            }
+            None => {
+                Err(anyhow!("Game {} not found", game_name.as_ref()))
+            }
+        }
+    }
+
+    pub fn get_sets_info<S>(db_file: S, game_names: Vec<S>, rom_mode: RomsetMode) -> Result<GameSetsInfo> where S: AsRef<str> {
         let mut games =  vec![];
         let conn = Romst::get_r_connection(db_file)?;
         let reader = Romst::get_data_reader(&conn)?;
         for game_name in game_names {
-            let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.1.into_iter().map(|db_rom| {
+            let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.into_iter().map(|db_rom| {
                 db_rom.file
             }).collect();
             let device_refs = reader.get_devices_for_game(game_name.as_ref())?;

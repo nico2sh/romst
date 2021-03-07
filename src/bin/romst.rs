@@ -278,7 +278,7 @@ fn info_set(matches: &ArgMatches) {
         None => RomsetMode::default() 
     };
 
-    match Romst::get_set_info(db, games, set_mode) {
+    match Romst::get_sets_info(db, games, set_mode) {
         Ok(romsets) => {
             print_from_format(matches, romsets);
         }

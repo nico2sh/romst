@@ -128,6 +128,20 @@ impl ScanReport {
         set.ref_game(game);
     }
 
+    pub fn has_reference_with_game<S>(&self, set_name: S) -> bool where S: AsRef<str> {
+        let set = self.sets.get(set_name.as_ref());
+        match set {
+            Some(set) => {
+                if let SetReference::Game(_) = set.reference {
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false
+        }
+    }
+
     pub fn add_dependencies<S>(&mut self, set_name: S, dependencies: Vec<String>) where S: AsRef<str> {
         let set = self.sets.entry(set_name.as_ref().to_owned()).or_insert_with(|| SetReport::new(set_name.as_ref()));
         set.device_dependencies.extend(dependencies.into_iter());

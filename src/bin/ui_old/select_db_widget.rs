@@ -16,38 +16,38 @@ enum OptionSelected {
     Err(Error)
 }
 
-enum DBListEntry {
+enum SelectDBEntry {
     Import, 
-    File(DBFileEntry)
+    File(SelectDBFileEntry)
 }
 
-impl DBListEntry {
+impl SelectDBEntry {
     fn get_entry_title(&self) -> String {
         match self {
-            DBListEntry::Import => "[IMPORT DAT FILE]".to_string(),
-            DBListEntry::File(entry) => entry.file_name.clone()
+            SelectDBEntry::Import => "[IMPORT DAT FILE]".to_string(),
+            SelectDBEntry::File(entry) => entry.file_name.clone()
         }
     }
 }
 
-struct DBFileEntry {
+struct SelectDBFileEntry {
     file_name: String,
     path: String
 }
 
-impl DBFileEntry {
+impl SelectDBFileEntry {
     fn new(file_name: String, path: String) -> Self { Self { file_name, path } }
 }
 
-pub struct DBWidget {
-    db_list: Vec<DBListEntry>,
+pub struct SelectDBWidget {
+    db_list: Vec<SelectDBEntry>,
     selected: ListState,
     option_selected: OptionSelected
 }
 
-impl DBWidget {
+impl SelectDBWidget {
     pub fn new() -> Self {
-        let db_list = DBWidget::get_db_list().unwrap_or_else(|_e| vec![]);
+        let db_list = SelectDBWidget::get_db_list().unwrap_or_else(|_e| vec![]);
         let mut selected = ListState::default();
         selected.select(Some(0));
         Self {
@@ -63,7 +63,7 @@ impl DBWidget {
         }).collect::<Vec<_>>()
     }
 
-    fn get_db_list() -> Result<Vec<DBListEntry>> {
+    fn get_db_list() -> Result<Vec<SelectDBEntry>> {
         let db_path = Path::new(BASE_PATH);
 
         if db_path.is_file() {
@@ -83,7 +83,7 @@ impl DBWidget {
                         let path_string = path.to_str().map(|s| s.to_string() );
 
                         if let (Some(l), Some(r)) = (file_name, path_string) {
-                            Some(DBListEntry::File(DBFileEntry::new(l, r)))
+                            Some(SelectDBEntry::File(SelectDBFileEntry::new(l, r)))
                         } else {
                             None
                         }
@@ -95,7 +95,7 @@ impl DBWidget {
             }
         }).collect::<Vec<_>>();
 
-        files.insert(0, DBListEntry::Import);
+        files.insert(0, SelectDBEntry::Import);
 
         Ok(files)
     }
@@ -204,10 +204,10 @@ impl DBWidget {
         if let Some(selected) = self.selected.selected() {
             let option_selected = if let Some(db_entry) = self.db_list.get(selected) {
                 match db_entry {
-                    DBListEntry::Import => {
+                    SelectDBEntry::Import => {
                         OptionSelected::Import
                     }
-                    DBListEntry::File(file_entry) => {
+                    SelectDBEntry::File(file_entry) => {
                         match Romst::get_db_info(&file_entry.path) {
                             Ok(info) => {
                                 OptionSelected::DbInfo(info)
@@ -227,7 +227,7 @@ impl DBWidget {
     }
 }
 
-impl <T: Backend> RomstWidget<T> for DBWidget {
+impl <T: Backend> RomstWidget<T> for SelectDBWidget {
     fn render_in(&mut self, frame: &mut Frame<T>, area: Rect) {
         let chunks = Layout::default()
             .direction(tui::layout::Direction::Horizontal)
@@ -255,15 +255,15 @@ impl <T: Backend> RomstWidget<T> for DBWidget {
 
         match &self.option_selected {
             OptionSelected::Import => {
-                let widget = DBWidget::get_import_db_widget();
+                let widget = SelectDBWidget::get_import_db_widget();
                 frame.render_widget(widget, chunks[1]);
             }
             OptionSelected::DbInfo(db_info) => {
-                let widget = DBWidget::get_db_detail_widget(db_info);
+                let widget = SelectDBWidget::get_db_detail_widget(db_info);
                 frame.render_widget(widget, chunks[1]);
             }
             OptionSelected::Err(error) => {
-                let widget = DBWidget::get_error_widget(error);
+                let widget = SelectDBWidget::get_error_widget(error);
                 frame.render_widget(widget, chunks[1]);
             }
         }

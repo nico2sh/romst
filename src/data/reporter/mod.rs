@@ -224,13 +224,16 @@ impl<R: DataReader> Reporter<R> {
 
             // We fetch all roms for the set we are analyzing
             let db_game_roms = self.data_reader.get_romset_roms(&set_name, rom_mode)?;
-            let game = db_game_roms.0;
-            let db_roms = db_game_roms.1;
+            let db_roms = db_game_roms;
 
-            let deps = self.data_reader.get_devices_for_game(&game.name)?;
-            scan_report.add_dependencies(&game.name, deps.dependencies);
+            let deps = self.data_reader.get_devices_for_game(&set_name)?;
+            scan_report.add_dependencies(&set_name, deps.dependencies);
 
-            scan_report.reference_with_game(game);
+            if !scan_report.has_reference_with_game(&set_name) {
+                if let Some(game) = self.data_reader.get_game(&set_name) {
+                    scan_report.reference_with_game(game);
+                }
+            }
 
             roms.get_roms_included().into_iter().for_each(|rom| {
                 // We look for coincidences in the database for the roms found for that set

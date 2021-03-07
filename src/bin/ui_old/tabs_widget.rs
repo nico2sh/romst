@@ -1,6 +1,6 @@
 use tui::{Frame, backend::Backend, layout::Rect, style::{Color, Modifier, Style}, text::{Span, Spans}, widgets::{Block, Borders, Tabs}};
 
-use super::{RomstWidget, db_widget::DBWidget, home_widget::HomeWidget};
+use super::{RomstWidget, select_db_widget::SelectDBWidget, home_widget::HomeWidget};
 
 #[derive(Copy, Clone, Debug)]
 pub enum MenuItem {
@@ -42,7 +42,7 @@ impl <T: Backend> TabsMenu<T> {
                 self.active_widget = Box::new(home_widget);
             }
             MenuItem::Database => {
-                let db_widget = DBWidget::new();
+                let db_widget = SelectDBWidget::new();
                 self.active_widget = Box::new(db_widget);
             }
             MenuItem::Roms => {}
