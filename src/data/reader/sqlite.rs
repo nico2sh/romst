@@ -148,6 +148,10 @@ impl <'d> DBReader <'d>{
         Self { conn }
     }
 
+    pub fn from_connection_owned(conn: Connection) -> Self {
+        Self { conn: &conn }
+    }
+
     pub fn get_dat_info(&self) -> Result<DatInfo> {
         let mut stmt = self.conn.prepare("SELECT key, value FROM info;")?;
         let mut name = String::new();
