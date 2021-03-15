@@ -1,13 +1,15 @@
-mod select_db;
-mod browse_db;
+mod utils;
+mod list_db;
+mod list_sets;
 
 use anyhow::Result;
 use cursive::{Cursive, align::HAlign, event::Key, views::*};
 
-use self::select_db::SelectDB;
+use self::list_db::SelectDB;
 
 pub fn render() -> Result<()> {
     let mut siv = cursive::default();
+    siv.runner().step();
 
     siv.add_global_callback('q', exit);
     siv.add_global_callback(Key::Esc,exit);

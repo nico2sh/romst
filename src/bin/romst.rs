@@ -6,7 +6,8 @@ use romst::{RomsetMode, Romst, sysout::{DatImporterReporterSysOut, ReportReporte
 use serde::Serialize;
 use std::{fmt::Display, path::Path, str::FromStr};
 
-mod ui;
+mod ui_cursive;
+mod ui_tui;
 
 const DB_EXTENSION: &str = "rst";
 
@@ -180,13 +181,20 @@ fn print_from_format<T: Serialize + Display>(matches: &ArgMatches, obj: T) {
 }
 
 fn ui(_matches: &ArgMatches) {
-    match ui::render() {
+    match ui_cursive::render() {
         Ok(_) => {}
         Err(e) => {
             println!("{} Loading the UI.\n{}",
                 Style::new().red().apply_to("ERROR"), e);
         }
     }
+    /*match ui_cursive::render() {
+        Ok(_) => {}
+        Err(e) => {
+            println!("{} Loading the UI.\n{}",
+                Style::new().red().apply_to("ERROR"), e);
+        }
+    }*/
 }
 
 fn check(matches: &ArgMatches) {
@@ -302,7 +310,7 @@ fn rom_usage(matches: &ArgMatches) {
             Romst::get_rom_usage(db, game, rom, set_mode)
         }
         None => { 
-            Romst::get_romset_usage(db, game, set_mode)
+            Romst::get_romset_shared_roms(db, game, set_mode)
             }
     };
 

@@ -1,25 +1,17 @@
-mod tabs_widget;
+mod widgets;
 mod footer_widget;
-mod home_widget;
-mod select_db_widget;
-mod db_list;
 
 use std::{io, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
 
 use crossterm::{event::{self, Event as CEvent, KeyCode, KeyEvent}, terminal::{disable_raw_mode, enable_raw_mode}};
 use anyhow::Result;
-use tui::{Frame, Terminal, backend::{Backend, CrosstermBackend}, layout::{Constraint, Direction, Layout, Rect}, widgets::{ListState}};
+use tui::{Terminal, backend::{Backend, CrosstermBackend}, layout::{Constraint, Direction, Layout}, widgets::{ListState}};
 
-use self::{footer_widget::Footer, tabs_widget::{MenuItem, TabsMenu}};
+use self::{footer_widget::Footer, widgets::tabs_widget::{MenuItem, TabsMenu}};
 
 enum Event<I> {
     Input(I),
     Tick,
-}
-
-pub trait RomstWidget<T: Backend> {
-    fn render_in(&mut self, frame: &mut Frame<T>, area: Rect);
-    fn process_key(&mut self, event: KeyEvent);
 }
 
 pub fn render() -> Result<()> {
@@ -78,7 +70,7 @@ pub fn render() -> Result<()> {
 
             tabs_menu.render_in(frame, chunks[0]);
 
-            tabs_menu.active_widget.render_in(frame, chunks[1]);
+            tabs_menu.render_active_widget(frame, chunks[1]);
 
         })?;
 
@@ -92,7 +84,7 @@ pub fn render() -> Result<()> {
     Ok(())
 }
 
-fn event_receiver<T: Backend>(rx: &Receiver<Event<KeyEvent>>, tabs_menu: &mut TabsMenu<T>) -> Result<bool> {
+fn event_receiver<T: Backend>(rx: &Receiver<Event<KeyEvent>>, tabs_menu: &mut TabsMenu<'static, T>) -> Result<bool> {
     match rx.recv()? {
         Event::Input(event) => {
             match event.code {
@@ -109,7 +101,7 @@ fn event_receiver<T: Backend>(rx: &Receiver<Event<KeyEvent>>, tabs_menu: &mut Ta
                     tabs_menu.select_menu_item(MenuItem::Roms);
                 }
                 _ => {
-                    tabs_menu.active_widget.process_key(event);
+                    tabs_menu.process_keys_active_widget(event);
                 }
             }
         },

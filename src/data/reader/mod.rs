@@ -184,14 +184,44 @@ pub trait DataReader {
             None => err!(RomstError::GenericError{ message: format!("Game {} not found", game_name.as_ref()) }),
         }
     }
+    fn get_set_info<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<GameSet> where S: AsRef<str> {
+        let roms = self.get_romset_roms(game_name.as_ref(), rom_mode)?.into_iter().map(|db_rom| {
+            db_rom.file
+        }).collect();
+        let device_refs = self.get_devices_for_game(game_name.as_ref())?;
+        match self.get_game(game_name.as_ref()) {
+            Some(game) => {
+                return Ok(GameSet::new(game, roms, vec![], vec![], device_refs.dependencies));
+            }
+            None => err!(RomstError::GenericError{ message: format!("Game {} not found", game_name.as_ref()) })
+        }
+    }
     /// Finds where this rom is included, in other games. Returns the games and the name used for that rom
-    fn find_rom_usage<S>(&self, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql;
+    fn get_rom_usage<S>(&self, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql;
     /// Gets all romsets that include roms in the searched game
     /// This is useful to know what new (incomplete though) sets can be generated from the current one
     fn get_romset_shared_roms<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql;
 
     /// Finds all romsets associated with the roms sent
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch>;
+
+    fn get_romset_dependencies<S>(&self, game_name: S, rom_mode: RomsetMode) -> Result<SetDependencies> where S: AsRef<str> {
+        let mut result = self.get_devices_for_game(game_name.as_ref())?;
+
+        // If we are in split mode, we add the parent as a dependency
+        match rom_mode {
+            RomsetMode::Split => {
+                if let Some(game) = self.get_game(game_name.as_ref()) {
+                    if let Some(clone_of) = game.clone_of {
+                        result.dependencies.push(clone_of);
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Ok(result)
+    }
 
     fn get_devices_for_game<S>(&self, game_name: S) -> Result<SetDependencies> where S: AsRef<str> + rusqlite::ToSql;
 

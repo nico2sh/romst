@@ -1,6 +1,6 @@
 use tui::{backend::Backend, layout::Alignment, style::{Color, Style}, text::{Span, Spans}, widgets::{Block, BorderType, Borders, Paragraph}};
 
-use super::RomstWidget;
+use super::{RomstWidget, WidgetDispatcher};
 
 pub struct HomeWidget {
 
@@ -10,7 +10,7 @@ impl HomeWidget {
     pub fn new() -> Self { Self {  } }
 }
 
-impl <T: Backend> RomstWidget<T> for HomeWidget {
+impl <'a, T: Backend> RomstWidget<'a, T> for HomeWidget where T: 'a {
     fn render_in(&mut self, frame: &mut tui::Frame<T>, area: tui::layout::Rect) {
         let paragraph = Paragraph::new(vec![
             Spans::from(vec![Span::raw("")]),
@@ -39,5 +39,8 @@ impl <T: Backend> RomstWidget<T> for HomeWidget {
 
     fn process_key(&mut self, _event: crossterm::event::KeyEvent) {
 
+    }
+
+    fn set_sender(&mut self, _sender: WidgetDispatcher<'a, T>) {
     }
 }

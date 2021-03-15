@@ -1,10 +1,10 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, thread};
 
 use cursive::{Cursive, View, align::HAlign, traits::{Boxable, Nameable, Scrollable}, views::{Dialog, DummyView, LinearLayout, Panel, SelectView, TextView}};
 use romst::Romst;
 use anyhow::Result;
 
-use super::browse_db::BrowseDB;
+use super::list_sets::ListSets;
 
 const BASE_PATH: &str = "db";
 
@@ -15,10 +15,6 @@ pub struct SelectDB {
 impl SelectDB {
     pub fn new() -> Self {
         Self { }
-    }
-
-    pub fn default() -> Self {
-        Self::new()
     }
 
     pub fn load_view(&self) -> Result<impl View> {
@@ -32,21 +28,21 @@ impl SelectDB {
 
         select_db.add_all(db_list.clone());
 
-        let mut db_details = TextView::new("No DB file found, make sure you have a DB in the `./db` directory next to the Romst executable.")
-            .h_align(HAlign::Center);
-        if !db_list.is_empty() {
+        let db_details_content = if !db_list.is_empty() {
             select_db = select_db.selected(0);
-
-            update_text_view(&mut db_details, &db_list[0].1);
+            ""
         } else {
             select_db.disable();
-        }
+            "No DB file found, make sure you have a DB in the `./db` directory next to the Romst executable."
+        };
+        let db_details = TextView::new(db_details_content)
+            .h_align(HAlign::Center);
 
         let dialog = Dialog::around(LinearLayout::horizontal()
             .child(select_db.with_name("selection_list").scrollable())
             .child(DummyView)
-            .child(Panel::new(db_details.with_name("db_details")).full_width())
-            )
+            .child(Panel::new(db_details.with_name("db_details"))
+            .full_width()))
             .title("Select DB file")
             .full_screen();
 
@@ -90,13 +86,28 @@ impl SelectDB {
 }
 
 fn on_select_db(s: &mut Cursive, value: &String) {
-    s.call_on_name("db_details", |view: &mut TextView| {
-        update_text_view(view, value)
+    let value = value.to_owned();
+    let cb_sink = s.cb_sink().clone();
+    thread::spawn(move || {
+        let db_info = Romst::get_db_info(value);
+        let content = match db_info {
+            Ok(info) => {
+                format!("{}", info)
+            }
+            Err(e) => {
+                format!("Error reading DB details.\n\n{}", e)
+            }
+        };
+        cb_sink.send(Box::new(move |s| {
+            s.call_on_name("db_details", |view: &mut TextView| {
+                view.set_content(content);
+            });
+        })).unwrap();
     });
 }
 
 fn on_choose_db(s: &mut Cursive, value: &String) {
-    let browse_db = BrowseDB::new(value);
+    let browse_db = ListSets::new(value);
     let view = browse_db.load_view();
     match view {
         Ok(v) => {
@@ -106,18 +117,6 @@ fn on_choose_db(s: &mut Cursive, value: &String) {
         Err(e) => {
             let v = browse_db.load_error_dialog(e);
             s.add_layer(v);
-        }
-    }
-}
-
-fn update_text_view(view: &mut TextView, value: &String) {
-    let db_info = Romst::get_db_info(value);
-    match db_info {
-        Ok(info) => {
-            view.set_content(format!("{}", info))
-        }
-        Err(e) => {
-            view.set_content(format!("Error reading DB details.\n\n{}", e))
         }
     }
 }

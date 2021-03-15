@@ -379,7 +379,7 @@ mod tests {
     async fn get_right_data_from_file() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
+        let data_reader = DBReader::from_connection(conn);
         // data_reader.print_games()?;
 
         let mut reporter = Reporter::new(data_reader);
@@ -414,7 +414,7 @@ mod tests {
     async fn get_right_data_from_single_file() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
+        let data_reader = DBReader::from_connection(conn);
 
         let mut reporter = Reporter::new(data_reader);
         let report_reporter = TestReportReporter::new();
@@ -442,7 +442,7 @@ mod tests {
     async fn get_wrong_data_from_file() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
+        let data_reader = DBReader::from_connection(conn);
 
         let mut reporter = Reporter::new(data_reader);
         let report_reporter = TestReportReporter::new();

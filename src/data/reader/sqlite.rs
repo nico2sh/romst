@@ -1,12 +1,11 @@
 use std::{collections::HashSet, fmt::Display, iter::FromIterator};
 
 use anyhow::Result;
-use console::Style;
 use log::{debug, error, warn};
 use rusqlite::{Connection, Row, ToSql, params};
 use serde::{Deserialize, Serialize};
 
-use crate::{data::models::dat_info::DatInfo, err, error::RomstError};
+use crate::{data::models::dat_info::DatInfo};
 use crate::{RomsetMode, data::models::{disk::GameDisk, file::{DataFile, DataFileInfo, FileType}, game::Game}};
 
 use super::{DataReader, DbDataEntry, FileCheckSearch, RomSearch, SetDependencies};
@@ -139,17 +138,13 @@ fn _process_rom_row(row: &Row) -> Result<(String, DbDataEntry<DataFile>, Option<
 }
 
 #[derive(Debug)]
-pub struct DBReader<'d> {
-    conn: &'d Connection,
+pub struct DBReader {
+    conn: Connection,
 }
 
-impl <'d> DBReader <'d>{
-    pub fn from_connection(conn: &'d Connection) -> Self {
+impl DBReader{
+    pub fn from_connection(conn: Connection) -> Self {
         Self { conn }
-    }
-
-    pub fn from_connection_owned(conn: Connection) -> Self {
-        Self { conn: &conn }
     }
 
     pub fn get_dat_info(&self) -> Result<DatInfo> {
@@ -177,7 +172,7 @@ impl <'d> DBReader <'d>{
         Ok(dat_info)
     }
 
-    pub fn get_stats(&self) -> Result<DBReport> {
+    pub fn get_db_info(&self) -> Result<DBReport> {
         let dat_info = self.get_dat_info()?;
         let mut db_report = DBReport::new(dat_info);
 
@@ -418,9 +413,9 @@ impl <'d> DBReader <'d>{
     }
 }
 
-impl <'d> DataReader for DBReader<'d> {
+impl DataReader for DBReader {
     fn get_game_list(&self, rom_mode: RomsetMode) -> Result<Vec<(String, String)>> {
-        let mut query = "SELECT name, info_desc FROM games ORDER BY name;".to_string();
+        let mut query = "SELECT name, info_desc FROM games".to_string();
         match rom_mode {
             RomsetMode::Merged => {
                 query.push_str(" WHERE rom_of IS NULL ORDER BY name;");
@@ -497,7 +492,7 @@ impl <'d> DataReader for DBReader<'d> {
         Ok(Vec::from_iter(roms))
     }
 
-    fn find_rom_usage<S>(&self, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql {
+    fn get_rom_usage<S>(&self, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> + rusqlite::ToSql {
         let game_roms = self.get_romset_roms(game_name, rom_mode)?;
         
         let roms = game_roms.into_iter().filter_map(|rom| {
@@ -508,7 +503,7 @@ impl <'d> DataReader for DBReader<'d> {
             }
         }).collect();
 
-        let rom_ids = DBReader::get_ids_from_files(self.conn, roms)?.found;
+        let rom_ids = DBReader::get_ids_from_files(&self.conn, roms)?.found;
 
         self.find_sets_for_roms(rom_ids, rom_mode)
     }
@@ -522,7 +517,7 @@ impl <'d> DataReader for DBReader<'d> {
     }
 
     fn get_romsets_from_roms(&self, roms: Vec<DataFile>, rom_mode: RomsetMode) -> Result<RomSearch> {
-        let mut search_rom_ids_result = DBReader::get_ids_from_files(self.conn, roms)?;
+        let mut search_rom_ids_result = DBReader::get_ids_from_files(&self.conn, roms)?;
 
         let mut rom_search = self.find_sets_for_roms(search_rom_ids_result.found, rom_mode)?;
         rom_search.unknowns.append(search_rom_ids_result.not_found.as_mut());
@@ -578,7 +573,7 @@ mod tests {
     fn test_get_sets() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
+        let data_reader = DBReader::from_connection(conn);
 
         let data_files = data_reader.get_romset_roms(&"game1".to_string(), RomsetMode::Merged)?;
         assert_eq!(data_files.len(), 6);
@@ -638,7 +633,7 @@ mod tests {
         let roms = rom_ids.len();
         assert_eq!(4, roms);
 
-        let data_reader = DBReader::from_connection(&conn);
+        let data_reader = DBReader::from_connection(conn);
         let rom_search = data_reader.find_sets_for_roms(rom_ids, RomsetMode::Split)?;
 
         assert_eq!(1, rom_search.set_results.len());
@@ -676,7 +671,7 @@ mod tests {
     fn find_sets_for_roms() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
+        let data_reader = DBReader::from_connection(conn);
 
         let mut roms = vec![];
         let mut rom1 = DataFile::new("rom1", DataFileInfo::new(FileType::Rom));
@@ -691,7 +686,7 @@ mod tests {
         // TODO add validation
         println!("{:?}", rom_sets);
 
-        let stats = data_reader.get_stats()?;
+        let stats = data_reader.get_db_info()?;
         // TODO add validation
         println!("{}", stats);
 
@@ -786,7 +781,7 @@ mod tests {
     fn get_devices_dependencies() -> Result<()> {
         let path = Path::new("testdata").join("test.dat");
         let conn = get_db_connection(&path)?;
-        let data_reader = DBReader::from_connection(&conn);
+        let data_reader = DBReader::from_connection(conn);
 
         let devices = data_reader.get_devices_for_game(&"game1".to_string())?;
         assert_eq!(devices.dependencies.len(), 1);

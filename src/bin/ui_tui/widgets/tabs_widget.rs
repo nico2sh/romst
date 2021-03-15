@@ -1,6 +1,7 @@
+use crossterm::event::KeyEvent;
 use tui::{Frame, backend::Backend, layout::Rect, style::{Color, Modifier, Style}, text::{Span, Spans}, widgets::{Block, Borders, Tabs}};
 
-use super::{RomstWidget, select_db_widget::SelectDBWidget, home_widget::HomeWidget};
+use crate::ui_tui::{widgets::{list_db_widget::SelectDBWidget, ViewManager, ViewMessage, error_widget::ErrorWidget, home_widget::HomeWidget}};
 
 #[derive(Copy, Clone, Debug)]
 pub enum MenuItem {
@@ -19,38 +20,50 @@ impl From<MenuItem> for usize {
     }
 }
 
-pub struct TabsMenu<T: Backend> {
+pub struct TabsMenu<'a, T: Backend> {
     active_menu_item: MenuItem,
-    pub active_widget: Box<dyn RomstWidget<T>>
+    view_manager: ViewManager<'a, T>
 }
 
-impl <T: Backend> TabsMenu<T> {
+impl <T: Backend> TabsMenu<'static, T> {
     pub fn new() -> Self {
         let active_menu_item = MenuItem::Home;
-        let home_widget = HomeWidget::new();
+        let view_manager = ViewManager::new();
 
         Self {
             active_menu_item,
-            active_widget: Box::new(home_widget)
+            view_manager
         }
     }
 
     pub fn select_menu_item(&mut self, menu_item: MenuItem) {
-        match menu_item {
+        let r = match menu_item {
             MenuItem::Home => {
                 let home_widget = HomeWidget::new();
-                self.active_widget = Box::new(home_widget);
+                // self.view_manager.active_widget = Box::new(home_widget);
+                self.view_manager.get_sender().send(ViewMessage::NewView(Box::new(home_widget)))
             }
             MenuItem::Database => {
                 let db_widget = SelectDBWidget::new();
-                self.active_widget = Box::new(db_widget);
+                // self.view_manager.active_widget = Box::new(db_widget);
+                self.view_manager.get_sender().send(ViewMessage::NewView(Box::new(db_widget)))
             }
-            MenuItem::Roms => {}
+            MenuItem::Roms => {
+                let error_widget = ErrorWidget::new("Generic");
+                // self.view_manager.active_widget = Box::new(error_widget);
+                self.view_manager.get_sender().send(ViewMessage::NewView(Box::new(error_widget)))
+            }
         };
+        if let Err(e) = r {
+            let error_widget = ErrorWidget::from_error(&e);
+            self.view_manager.set_active_widget(Box::new(error_widget));
+        }
         self.active_menu_item = menu_item;
     }
 
-    pub fn render_in(&self, frame: &mut Frame<T>, area: Rect) {
+    pub fn render_in(&mut self, frame: &mut Frame<T>, area: Rect) {
+        self.view_manager.update();
+
         let menu_titles = vec!["Home", "Db", "Roms", "Quit"];
         let menu = menu_titles
             .iter()
@@ -75,5 +88,13 @@ impl <T: Backend> TabsMenu<T> {
             .divider(Span::raw("|"));
 
         frame.render_widget(tabs, area);
+    }
+
+    pub fn render_active_widget(&mut self, frame: &mut Frame<T>, area: Rect) {
+        self.view_manager.render_active_widget(frame, area);
+    }
+
+    pub fn process_keys_active_widget(&mut self, event: KeyEvent) {
+        self.view_manager.process_keys_active_widget(event);
     }
 }
