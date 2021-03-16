@@ -8,24 +8,23 @@ use anyhow::Result;
 use super::utils::{get_style_bad_dump, get_style_no_dump, truncate_text};
 
 pub struct ListSets {
-    db_file: String,
+    db_reader: Arc<Mutex<DBReader>>,
     rom_mode: RomsetMode,
     set_list: Rc<Vec<(String, String)>>
 }
 
 impl ListSets {
     pub fn new<S>(db_file: S) -> Self where S: Into<String> {
+        let db_reader = Romst::get_data_reader(db_file.into()).unwrap();
         Self {
-            db_file: db_file.into(),
+            db_reader: Arc::new(Mutex::new(db_reader)),
             rom_mode: RomsetMode::default(),
             set_list: Rc::new(vec![])
         }
     }
 
     pub fn load_view(&mut self) -> Result<ResizedView<Dialog>> {
-        let db_reader = Romst::get_data_reader(&self.db_file)?;
-
-        self.set_list = Rc::new(db_reader.get_game_list(self.rom_mode)?);
+        self.set_list = Rc::new(self.db_reader.lock().unwrap().get_game_list(self.rom_mode)?);
 
         let g_list = self.set_list.iter()
         .map(|item| {
@@ -37,10 +36,11 @@ impl ListSets {
             .autojump();
         select_game.add_all(g_list);
 
-        let db = Arc::new(Mutex::new(db_reader));
+        let db = Arc::clone(&self.db_reader);
+        let db_select = Arc::clone(&db);
         select_game = select_game
         .on_select(move |s, value| {
-            on_select_game(s, value.to_owned(), Arc::clone(&db));
+            on_select_game(s, value.to_owned(), db_select.clone());
         });
 
         let mut roms_header = StyledString::styled(" Roms |", Style::none());
@@ -81,6 +81,7 @@ impl ListSets {
     }
 
     fn get_top_view(&self) -> ResizedView<Panel<LinearLayout>> {
+        let db = Arc::clone(&self.db_reader);
         let sets = Rc::clone(&self.set_list);
         let layout = LinearLayout::horizontal()
         .child(Button::new("Filter: [*None*]", move |s| {
@@ -89,8 +90,8 @@ impl ListSets {
         .child(DummyView)
         .child(TextView::new("|"))
         .child(DummyView)
-        .child(Button::new(format!("Rom Mode: {}", self.rom_mode), |s| {
-
+        .child(Button::new(format!("Rom Mode: {}", self.rom_mode), move |s| {
+            let game_list = db.lock().unwrap().get_game_list(RomsetMode::Split);
         }))
         .child(DummyView)
         .child(TextView::new("|"))
