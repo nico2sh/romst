@@ -7,7 +7,6 @@ use serde::Serialize;
 use std::{fmt::Display, path::Path, str::FromStr};
 
 mod ui_cursive;
-mod ui_tui;
 
 const DB_EXTENSION: &str = "rst";
 

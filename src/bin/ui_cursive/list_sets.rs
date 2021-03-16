@@ -10,7 +10,7 @@ use super::utils::{get_style_bad_dump, get_style_no_dump, truncate_text};
 pub struct ListSets {
     db_file: String,
     rom_mode: RomsetMode,
-    set_list: Vec<(String, String)>
+    set_list: Rc<Vec<(String, String)>>
 }
 
 impl ListSets {
@@ -18,14 +18,14 @@ impl ListSets {
         Self {
             db_file: db_file.into(),
             rom_mode: RomsetMode::default(),
-            set_list: vec![]
+            set_list: Rc::new(vec![])
         }
     }
 
     pub fn load_view(&mut self) -> Result<ResizedView<Dialog>> {
         let db_reader = Romst::get_data_reader(&self.db_file)?;
 
-        self.set_list = db_reader.get_game_list(self.rom_mode)?;
+        self.set_list = Rc::new(db_reader.get_game_list(self.rom_mode)?);
 
         let g_list = self.set_list.iter()
         .map(|item| {
@@ -81,7 +81,7 @@ impl ListSets {
     }
 
     fn get_top_view(&self) -> ResizedView<Panel<LinearLayout>> {
-        let sets = self.set_list.clone();
+        let sets = Rc::clone(&self.set_list);
         let layout = LinearLayout::horizontal()
         .child(Button::new("Filter: [*None*]", move |s| {
             filter_games_dialog(s, sets.clone());
@@ -103,13 +103,12 @@ impl ListSets {
     }
 }
 
-fn filter_games_dialog<'a>(s: &mut Cursive, set_list: Vec<(String, String)>) {
-    let list = Rc::new(set_list.clone());
-    let list1 = Rc::clone(&list);
+fn filter_games_dialog<'a>(s: &mut Cursive, set_list: Rc<Vec<(String, String)>>) {
+    let list = Rc::clone(&set_list);
     let filter_dialog = Dialog::new()
     .content(EditView::new()
         .on_submit(move |s, filter| {
-            filter_set(s, Rc::clone(&list1), filter);
+            filter_set(s, Rc::clone(&set_list), filter);
         })
         .with_name("filter_text")
         .fixed_width(40)
