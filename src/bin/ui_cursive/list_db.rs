@@ -107,7 +107,7 @@ fn on_select_db(s: &mut Cursive, value: &String) {
 }
 
 fn on_choose_db(s: &mut Cursive, value: &String) {
-    let browse_db = ListSets::new(value);
+    let mut browse_db = ListSets::new(value);
     let view = browse_db.load_view();
     match view {
         Ok(v) => {
