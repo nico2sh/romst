@@ -10,7 +10,7 @@ use super::utils::{get_style_bad_dump, get_style_no_dump, truncate_text};
 pub struct ListSets {
     db_reader: Arc<Mutex<DBReader>>,
     rom_mode: RomsetMode,
-    set_list: Rc<Vec<(String, String)>>
+    filter: Arc<Mutex<String>>,
 }
 
 impl ListSets {
@@ -19,14 +19,12 @@ impl ListSets {
         Self {
             db_reader: Arc::new(Mutex::new(db_reader)),
             rom_mode: RomsetMode::default(),
-            set_list: Rc::new(vec![])
+            filter: Arc::new(Mutex::new(String::new()))
         }
     }
 
     pub fn load_view(&mut self) -> Result<ResizedView<Dialog>> {
-        self.set_list = Rc::new(self.db_reader.lock().unwrap().get_game_list(self.rom_mode)?);
-
-        let g_list = self.set_list.iter()
+        let g_list = self.db_reader.lock().unwrap().get_game_list(self.rom_mode)?.iter()
         .map(|item| {
             (format!("{}", truncate_text(&item.0, 20)), item.0.clone())
         }).collect::<Vec<_>>();
@@ -81,17 +79,20 @@ impl ListSets {
     }
 
     fn get_top_view(&self) -> ResizedView<Panel<LinearLayout>> {
-        let db = Arc::clone(&self.db_reader);
-        let sets = Rc::clone(&self.set_list);
+        let db_filter = Arc::clone(&self.db_reader);
+        let db_rom_mode = Arc::clone(&self.db_reader);
+        let filter = Arc::clone(&self.filter);
+        let filter_rom_mode = Arc::clone(&self.filter);
+        let rom_mode = self.rom_mode;
         let layout = LinearLayout::horizontal()
         .child(Button::new("Filter: [*None*]", move |s| {
-            filter_games_dialog(s, sets.clone());
+            filter_games_dialog(s, db_filter.clone(), rom_mode, filter.clone());
         }).with_name("button_filter"))
         .child(DummyView)
         .child(TextView::new("|"))
         .child(DummyView)
         .child(Button::new(format!("Rom Mode: {}", self.rom_mode), move |s| {
-            let game_list = db.lock().unwrap().get_game_list(RomsetMode::Split);
+            rom_mod_dialog(s, db_rom_mode.clone(), rom_mode, filter_rom_mode.clone());
         }))
         .child(DummyView)
         .child(TextView::new("|"))
@@ -104,12 +105,23 @@ impl ListSets {
     }
 }
 
-fn filter_games_dialog<'a>(s: &mut Cursive, set_list: Rc<Vec<(String, String)>>) {
-    let list = Rc::clone(&set_list);
+fn rom_mod_dialog(s: &mut Cursive, db_reader: Arc<Mutex<DBReader>>, rom_mode: RomsetMode, filter: Arc<Mutex<String>>) {
+    
+}
+
+fn filter_games_dialog<'a>(s: &mut Cursive, db_reader: Arc<Mutex<DBReader>>, rom_mode: RomsetMode, filter: Arc<Mutex<String>>) {
+    let db_reader_button = Arc::clone(&db_reader);
+    let filter_button = Arc::clone(&filter);
+    let current_filter = {
+        filter.lock().unwrap().to_owned()
+    };
     let filter_dialog = Dialog::new()
     .content(EditView::new()
-        .on_submit(move |s, filter| {
-            filter_set(s, Rc::clone(&set_list), filter);
+        .content(current_filter)
+        .on_submit(move |s, filter_to_set| {
+            *filter.lock().unwrap() = filter_to_set.to_string();
+            filter_set(s, db_reader.clone(), rom_mode, filter_to_set);
+            s.pop_layer();
         })
         .with_name("filter_text")
         .fixed_width(40)
@@ -117,9 +129,12 @@ fn filter_games_dialog<'a>(s: &mut Cursive, set_list: Rc<Vec<(String, String)>>)
         let content = s.call_on_name("filter_text", |view: &mut EditView| {
             view.get_content()
         });
-        if let Some(filter) = content {
-            filter_set(s, Rc::clone(&list), &filter);
+        let filter_to_set = match content {
+            Some(filter_to_set) => filter_to_set.to_string(),
+            None => String::new()
         };
+        *filter_button.lock().unwrap() = filter_to_set.to_string();
+        filter_set(s, db_reader_button.clone(), rom_mode, &filter_to_set);
         s.pop_layer();
     }).button("Close", |s| {
         s.pop_layer();
@@ -127,24 +142,36 @@ fn filter_games_dialog<'a>(s: &mut Cursive, set_list: Rc<Vec<(String, String)>>)
     s.add_layer(filter_dialog);
 }
 
-fn filter_set(s: &mut Cursive, set_list: Rc<Vec<(String, String)>>, filter: &str) {
-    let filtered = set_list.iter().filter_map(|set| {
-        if set.0.contains(filter) || set.1.contains(filter) {
-            Some((format!("{}", truncate_text(&set.0, 20)), set.0.clone()))
-        } else {
-            None
-        }
-    }).collect::<Vec<_>>();
+fn filter_set(s: &mut Cursive, db_reader: Arc<Mutex<DBReader>>, rom_mode: RomsetMode, filter: &str) {
+    let cb_sink = s.cb_sink().clone();
+    let filter = filter.to_string();
+    thread::spawn(move || {
+        let set_list = db_reader.lock().unwrap().get_game_list(rom_mode).unwrap().iter()
+            .map(|item| {
+                (format!("{}", truncate_text(&item.0, 20)), item.0.clone())
+            }).collect::<Vec<_>>();
+        let filtered = set_list.iter().filter_map(|set| {
+            if set.0.contains(&filter) || set.1.contains(&filter) {
+                Some((format!("{}", truncate_text(&set.0, 20)), set.0.clone()))
+            } else {
+                None
+            }
+        }).collect::<Vec<_>>();
 
-    s.call_on_name("selection_list", |view: &mut SelectView<String>| {
-        view.clear();
-        view.add_all(filtered);
+        cb_sink.send(Box::new(move |s| {
+            s.call_on_name("selection_list", |view: &mut SelectView<String>| {
+                view.clear();
+                view.add_all(filtered);
+            });
+
+            let filter = if filter.is_empty() { "*None*" } else { filter.as_str() };
+            s.call_on_name("button_filter", |view: &mut Button| {
+                view.set_label(format!("Filter: [{}]", filter));
+            });
+        })).unwrap();
     });
 
-    let filter = if filter.is_empty() { "*None*" } else { filter };
-    s.call_on_name("button_filter", |view: &mut Button| {
-        view.set_label(format!("Filter: [{}]", filter));
-    });
+
 }
 
 fn on_select_game(s: &mut Cursive, game_name: String, db_reader: Arc<Mutex<DBReader>>) {
