@@ -12,7 +12,6 @@ pub fn render() -> Result<()> {
     let theme = custom_theme_from_cursive(&siv);
     siv.set_theme(theme);
 
-    siv.add_global_callback('q', exit);
     siv.add_global_callback(Key::Esc,exit);
 
     let select_db = SelectDB::new();

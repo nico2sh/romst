@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::{Arc, Mutex}, thread};
+use std::{sync::{Arc, Mutex}, thread};
 
 use cursive::{Cursive, View, align::HAlign, theme::{Effect, Style}, traits::{Boxable, Nameable, Scrollable}, utils::markup::StyledString, views::{Button, Dialog, DummyView, EditView, LinearLayout, Panel, ResizedView, SelectView, TextView}};
 use romst::{RomsetMode, Romst, data::{models::{file::DataFile, set::GameSet}, reader::{DataReader, sqlite::DBReader}}};
@@ -24,6 +24,38 @@ impl ListSets {
     }
 
     pub fn load_view(&mut self) -> Result<ResizedView<Dialog>> {
+        let mut roms_header = StyledString::styled(" Roms |", Style::none());
+        roms_header.append(get_style_no_dump(" No Dump "));
+        roms_header.append(StyledString::styled("|", Style::none()));
+        roms_header.append(get_style_bad_dump(" Bad Dump"));
+
+        let game_roms = SelectView::<DataFile>::new().h_align(HAlign::Left);
+        let game_details = LinearLayout::horizontal()
+        .child(TextView::new("").with_name("game_details").full_width())
+        .child(LinearLayout::vertical()
+        .child(TextView::new(roms_header))
+        .child(Panel::new(game_roms.with_name("game_roms").scrollable().fixed_width(40))));
+
+        let top_view = self.get_top_view();
+        let left_column = self.get_sets_list()?;
+
+        let center_view = LinearLayout::horizontal()
+        .child(left_column)
+        .child(DummyView)
+        .child(Panel::new(game_details.full_width()).full_width());
+
+        let view = LinearLayout::vertical()
+        .child(top_view)
+        .child(center_view);
+
+        let dialog = Dialog::around(view)
+        .title("Select Set")
+        .full_screen();
+
+        Ok(dialog)
+    }
+
+    pub fn get_sets_list(&self) -> Result<LinearLayout> {
         let g_list = self.db_reader.lock().unwrap().get_game_list(self.rom_mode)?.iter()
         .map(|item| {
             (format!("{}", truncate_text(&item.0, 20)), item.0.clone())
@@ -41,34 +73,19 @@ impl ListSets {
             on_select_game(s, value.to_owned(), db_select.clone());
         });
 
-        let mut roms_header = StyledString::styled(" Roms |", Style::none());
-        roms_header.append(get_style_no_dump(" No Dump "));
-        roms_header.append(StyledString::styled("|", Style::none()));
-        roms_header.append(get_style_bad_dump(" Bad Dump"));
+        let db_filter = Arc::clone(&self.db_reader);
+        let filter = Arc::clone(&self.filter);
+        let rom_mode = self.rom_mode;
+        let filter_button = Button::new("Filter: [*None*]", move |s| {
+            filter_games_dialog(s, db_filter.clone(), rom_mode, filter.clone());
+        }).with_name("button_filter");
 
-        let game_roms = SelectView::<DataFile>::new().h_align(HAlign::Left);
-        let game_details = LinearLayout::horizontal()
-        .child(TextView::new("").with_name("game_details").full_width())
-        .child(LinearLayout::vertical()
-        .child(TextView::new(roms_header))
-        .child(Panel::new(game_roms.with_name("game_roms").scrollable().fixed_width(40))));
-
-        let top_view = self.get_top_view();
-
-        let center_view = LinearLayout::horizontal()
-        .child(select_game.with_name("selection_list").scrollable())
+        let sets_list = LinearLayout::vertical()
+        .child(filter_button)
         .child(DummyView)
-        .child(Panel::new(game_details.full_width()).full_width());
+        .child(select_game.with_name("selection_list").scrollable());
 
-        let view = LinearLayout::vertical()
-        .child(top_view)
-        .child(center_view);
-
-        let dialog = Dialog::around(view)
-        .title("Select Set")
-        .full_screen();
-
-        Ok(dialog)
+        Ok(sets_list)
     }
 
     pub fn load_error_dialog(&self, e: anyhow::Error) -> impl View {
@@ -79,18 +96,10 @@ impl ListSets {
     }
 
     fn get_top_view(&self) -> ResizedView<Panel<LinearLayout>> {
-        let db_filter = Arc::clone(&self.db_reader);
         let db_rom_mode = Arc::clone(&self.db_reader);
-        let filter = Arc::clone(&self.filter);
         let filter_rom_mode = Arc::clone(&self.filter);
         let rom_mode = self.rom_mode;
         let layout = LinearLayout::horizontal()
-        .child(Button::new("Filter: [*None*]", move |s| {
-            filter_games_dialog(s, db_filter.clone(), rom_mode, filter.clone());
-        }).with_name("button_filter"))
-        .child(DummyView)
-        .child(TextView::new("|"))
-        .child(DummyView)
         .child(Button::new(format!("Rom Mode: {}", self.rom_mode), move |s| {
             rom_mod_dialog(s, db_rom_mode.clone(), rom_mode, filter_rom_mode.clone());
         }))

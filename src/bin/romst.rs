@@ -7,7 +7,6 @@ use serde::Serialize;
 use std::{fmt::Display, path::Path, str::FromStr};
 
 mod ui_cursive;
-mod ui_tui;
 
 const DB_EXTENSION: &str = "rst";
 
@@ -181,7 +180,7 @@ fn print_from_format<T: Serialize + Display>(matches: &ArgMatches, obj: T) {
 }
 
 fn ui(_matches: &ArgMatches) {
-    match ui_tui::render() {
+    match ui_cursive::render() {
         Ok(_) => {}
         Err(e) => {
             println!("{} Loading the UI.\n{}",
