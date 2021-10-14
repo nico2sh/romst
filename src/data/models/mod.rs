@@ -1,5 +1,6 @@
 use std::path::Path;
 
+pub mod dat_info;
 pub mod set;
 pub mod game;
 pub mod file;

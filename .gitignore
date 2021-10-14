@@ -4,6 +4,7 @@
 /*.dat
 /*.xml
 /*.db
-/db/*
+/db/**
 .DS_Store
 ahem.txt
+bfg.jar

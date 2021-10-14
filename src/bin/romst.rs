@@ -1,10 +1,12 @@
-use clap::{App, Arg, ArgMatches};
+use clap::{App, Arg, ArgMatches, crate_version};
 use anyhow::{Result, anyhow};
 use console::Style;
 use env_logger::{Builder, Env, Target};
 use romst::{RomsetMode, Romst, sysout::{DatImporterReporterSysOut, ReportReporterSysOut}};
 use serde::Serialize;
 use std::{fmt::Display, path::Path, str::FromStr};
+
+mod ui_cursive;
 
 const DB_EXTENSION: &str = "rst";
 
@@ -58,11 +60,13 @@ fn create_matches() -> ArgMatches {
         .required(false);
 
     let matches = App::new("romst")
-        .version("0.1b")
+        .version(crate_version!())
         .author("Nico H. <mail@nico2sh.com>")
+        .subcommand(App::new("ui")
+            .about("Loads the UI"))
         .subcommand(App::new("import")
             .about("Import a DAT file into the database")
-            .arg(Arg::new("file")
+            .arg(Arg::new("source")
                 .about("Source DAT file")
                 .long("source")
                 .short('s')
@@ -147,6 +151,7 @@ fn main() {
     let matches = create_matches();
 
     match matches.subcommand() {
+        Some(("ui", ui_matches)) => ui(ui_matches),
         Some(("import", import_matches)) => import(import_matches),
         Some(("info", info_matches)) => info(info_matches),
         Some(("check", check_matches)) => check(check_matches),
@@ -172,6 +177,16 @@ fn print_from_format<T: Serialize + Display>(matches: &ArgMatches, obj: T) {
         }
         OutputFormat::Plain => println!("{}", obj)
     };
+}
+
+fn ui(_matches: &ArgMatches) {
+    match ui_cursive::render() {
+        Ok(_) => {}
+        Err(e) => {
+            println!("{} Loading the UI.\n{}",
+                Style::new().red().apply_to("ERROR"), e);
+        }
+    }
 }
 
 fn check(matches: &ArgMatches) {
@@ -263,7 +278,7 @@ fn info_set(matches: &ArgMatches) {
         None => RomsetMode::default() 
     };
 
-    match Romst::get_set_info(db, games, set_mode) {
+    match Romst::get_sets_info(db, games, set_mode) {
         Ok(romsets) => {
             print_from_format(matches, romsets);
         }
@@ -287,7 +302,7 @@ fn rom_usage(matches: &ArgMatches) {
             Romst::get_rom_usage(db, game, rom, set_mode)
         }
         None => { 
-            Romst::get_romset_usage(db, game, set_mode)
+            Romst::get_romset_shared_roms(db, game, set_mode)
             }
     };
 

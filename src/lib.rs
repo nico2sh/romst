@@ -1,4 +1,4 @@
-mod data;
+pub mod data;
 mod error;
 mod filesystem;
 mod macros;
@@ -80,22 +80,23 @@ impl Display for GameSetsInfo {
 }
 
 impl Romst {
-    fn get_rw_connection<S>(db_file: S) -> Result<Connection> where S: AsRef<str>{
-        let db_path = Path::new(db_file.as_ref());
+    fn get_rw_connection(db_file: &str) -> Result<Connection> {
+        let db_path = Path::new(db_file);
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
         Ok(conn)
     }
 
-    fn get_r_connection<S>(db_file: S) -> Result<Connection> where S: AsRef<str> {
-        let db_path = Path::new(db_file.as_ref());
+    fn get_r_connection(db_file: &str) -> Result<Connection> {
+        let db_path = Path::new(db_file);
         if !db_path.exists() {
-            return Err(anyhow!("No Database found at `{}`", db_file.as_ref()));
+            return Err(anyhow!("No Database found at `{}`", db_file));
         }
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         Ok(conn)
     }
 
-    pub fn get_data_reader(conn: &Connection) -> Result<DBReader> {
+    pub fn get_data_reader<S>(db_file: S) -> Result<DBReader> where S: AsRef<str>{
+        let conn = Romst::get_r_connection(db_file.as_ref())?;
         Ok(DBReader::from_connection(conn))
     }
 
@@ -112,7 +113,7 @@ impl Romst {
             return Err(anyhow!("Destination file `{}` already exists, choose another output or rename the file.", output_file.as_ref()));
         }
 
-        let mut conn = Romst::get_rw_connection(output_file)?;
+        let mut conn = Romst::get_rw_connection(output_file.as_ref())?;
         let db_writer = DBWriter::from_connection(&mut conn, DEFAULT_WRITE_BUFFER_SIZE);
         let mut dat_importer = DatImporter::from_path(&input.as_ref().to_string(), db_writer)?;
         if let Some(r) = reporter {
@@ -127,12 +128,22 @@ impl Romst {
         Ok(())
     }
 
-    pub fn get_set_info<S>(db_file: S, game_names: Vec<S>, rom_mode: RomsetMode) -> Result<GameSetsInfo> where S: AsRef<str> {
+    // Returns a list of the games and their description
+    pub fn get_game_list<S>(db_file: S, rom_mode: RomsetMode) -> Result<Vec<(String, String)>> where S: AsRef<str> {
+        let reader = Romst::get_data_reader(db_file)?;
+        reader.get_game_list(rom_mode)
+    }
+
+    pub fn get_set_info<S>(db_file: S, game_name: S, rom_mode: RomsetMode) -> Result<GameSet> where S: AsRef<str> {
+        let reader = Romst::get_data_reader(db_file)?;
+        reader.get_set_info(game_name, rom_mode)
+    }
+
+    pub fn get_sets_info<S>(db_file: S, game_names: Vec<S>, rom_mode: RomsetMode) -> Result<GameSetsInfo> where S: AsRef<str> {
         let mut games =  vec![];
-        let conn = Romst::get_r_connection(db_file)?;
-        let reader = Romst::get_data_reader(&conn)?;
+        let reader = Romst::get_data_reader(db_file)?;
         for game_name in game_names {
-            let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.1.into_iter().map(|db_rom| {
+            let roms = reader.get_romset_roms(game_name.as_ref(), rom_mode)?.into_iter().map(|db_rom| {
                 db_rom.file
             }).collect();
             let device_refs = reader.get_devices_for_game(game_name.as_ref())?;
@@ -150,46 +161,27 @@ impl Romst {
     }
 
     pub fn get_rom_usage<S>(db_file: S, game_name: S, rom_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> {
-        let conn = Romst::get_r_connection(db_file)?;
-        let reader = Romst::get_data_reader(&conn)?;
-        reader.find_rom_usage(game_name.as_ref(), rom_name.as_ref(), rom_mode)
+        let reader = Romst::get_data_reader(db_file)?;
+        reader.get_rom_usage(game_name.as_ref(), rom_name.as_ref(), rom_mode)
     }
 
-    pub fn get_romset_usage<S>(db_file: S, game_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> {
-        let conn = Romst::get_r_connection(db_file)?;
-        let reader = Romst::get_data_reader(&conn)?;
+    pub fn get_romset_shared_roms<S>(db_file: S, game_name: S, rom_mode: RomsetMode) -> Result<RomSearch> where S: AsRef<str> {
+        let reader = Romst::get_data_reader(db_file)?;
         reader.get_romset_shared_roms(game_name.as_ref(), rom_mode)
     }
 
     pub fn get_romset_dependencies<S>(db_file: S, game_name: S, rom_mode: RomsetMode) -> Result<SetDependencies> where S: AsRef<str> {
-        let conn = Romst::get_r_connection(db_file)?;
-        let reader = Romst::get_data_reader(&conn)?;
-        let mut result = reader.get_devices_for_game(game_name.as_ref())?;
-
-        // If we are in split mode, we add the parent as a dependency
-        match rom_mode {
-            RomsetMode::Split => {
-                if let Some(game) = reader.get_game(game_name.as_ref()) {
-                    if let Some(clone_of) = game.clone_of {
-                        result.dependencies.push(clone_of);
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        Ok(result)
+        let reader = Romst::get_data_reader(db_file)?;
+        reader.get_romset_dependencies(game_name, rom_mode)
     }
 
     pub fn get_db_info<S>(db_file: S) -> Result<DBReport> where S: AsRef<str>{
-        let conn = Romst::get_r_connection(db_file)?;
-        let reader = Romst::get_data_reader(&conn)?;
-        reader.get_stats()
+        let reader = Romst::get_data_reader(db_file)?;
+        reader.get_db_info()
     }
 
     pub fn get_report<R, S>(db_file: S, file_paths: Vec<impl AsRef<Path>>, rom_mode: RomsetMode, progress_reporter: Option<R>) -> Result<ScanReport> where R: ReportReporter + 'static, S: AsRef<str> {
-        let conn = Romst::get_r_connection(db_file)?;
-        let reader = Romst::get_data_reader(&conn)?;
+        let reader = Romst::get_data_reader(db_file)?;
 
         let mut reporter = Reporter::new(reader);
         if let Some(progress_reporter) = progress_reporter {

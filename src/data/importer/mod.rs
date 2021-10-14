@@ -5,7 +5,9 @@ use anyhow::Result;
 use quick_xml::{Reader, events::{attributes::Attributes, Event}};
 use crate::{data::writer::*, err, error::RomstError};
 
-use super::models::{disk::{GameDisk, GameDiskInfo}, file::DataFile, file::{DataFileInfo, FileType}, game::Game};
+use super::models::{disk::{GameDisk, GameDiskInfo}, file::DataFile, file::{DataFileInfo, FileType}, game::Game, dat_info::DatInfo};
+
+const _VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct DatImporter<R: BufRead, W: DataWriter> {
     reader: Reader<R>,
@@ -202,38 +204,52 @@ impl<R: BufRead, W: DataWriter> DatImporter<R, W> {
         loop {
             match self.reader.read_event(&mut buf)? {
                 Event::Start(ref e) => {
-                    if let Ok(name) = str::from_utf8(e.name()) {
-                        match name.to_lowercase().trim() {
+                    let mut name = String::new();
+                    let mut desc = String::new();
+                    let mut ver = String::new();
+                    let mut extras = vec![];
+                    if let Ok(key) = str::from_utf8(e.name()) {
+                        match key.to_lowercase().trim() {
                             "name" => {
-                                let name = self.get_text()?;
+                                name = self.get_text()?;
                                 info!("Name: {}", name);
                             },
                             "description" => {
-                                let desc = self.get_text()?;
+                                desc = self.get_text()?;
                                 info!("Description: {}", desc);
                             },
-                            "category" => {
+                            "version" => {
+                                ver = self.get_text()?;
+                                info!("Version: {}", ver);
+                            },
+                            /*"category" => {
                                 let cat = self.get_text()?;
                                 info!("Category: {}", cat);
-                            },
-                            "version" => {
-                                let ver = self.get_text()?;
-                                info!("Version: {}", ver);
                             },
                             "comment" => {
                                 let comment = self.get_text()?;
                                 info!("Comment: {}", comment);
-                            },
+                            },*/
                             tag_name => {
+                                extras.push((tag_name.to_string(), self.get_text()?));
                                 // we consume the tag
-                                self.consume_tag(tag_name.trim().to_string())?;
+                                // self.consume_tag(tag_name.trim().to_string())?;
                             },
                         }
                     }
+                    let dat_info = DatInfo::new(name, desc, ver, extras);
+                    self.writer.on_dat_info(dat_info)?;
                 },
                 Event::End(_) => break,
                 Event::Eof => panic!("Unexpected end of file"),
-                _ => (),
+                
+                Event::Empty(_) => {}
+                Event::Text(_) => {}
+                Event::Comment(_) => {}
+                Event::CData(_) => {}
+                Event::Decl(_) => {}
+                Event::PI(_) => {}
+                Event::DocType(_) => {}
             }
         }
         buf.clear();
@@ -456,6 +472,10 @@ mod tests {
         fn on_new_entry(&mut self, game: Game, _roms: Vec<DataFile>, _disks: Vec<GameDisk>, _samples: Vec<String>, _device_refs: Vec<String>) -> Result<()> {
             self.games.borrow_mut().push(game.name);
 
+            Ok(())
+        }
+
+        fn on_dat_info(&mut self, _dat_info: DatInfo) -> Result<()> {
             Ok(())
         }
     }
