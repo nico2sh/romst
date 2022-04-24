@@ -1,6 +1,6 @@
 use std::{fs, path::Path, thread};
 
-use cursive::{Cursive, View, align::HAlign, traits::{Boxable, Nameable, Scrollable}, views::{Dialog, DummyView, LinearLayout, Panel, SelectView, TextView}};
+use cursive::{Cursive, View, align::HAlign, traits::{Nameable, Scrollable, Resizable}, views::{Dialog, DummyView, LinearLayout, Panel, SelectView, TextView}};
 use romst::Romst;
 use anyhow::Result;
 

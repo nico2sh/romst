@@ -1,6 +1,6 @@
 use std::{sync::{Arc, Mutex}, thread};
 
-use cursive::{Cursive, View, align::HAlign, theme::{Effect, Style}, traits::{Boxable, Nameable, Scrollable}, utils::markup::StyledString, views::{Button, Dialog, DummyView, EditView, LinearLayout, Panel, ResizedView, SelectView, TextView}};
+use cursive::{Cursive, View, align::HAlign, theme::{Effect, Style}, traits::{Nameable, Scrollable, Resizable}, utils::markup::StyledString, views::{Button, Dialog, DummyView, EditView, LinearLayout, Panel, ResizedView, SelectView, TextView}};
 use romst::{RomsetMode, Romst, data::{models::{file::DataFile, set::GameSet}, reader::{DataReader, sqlite::DBReader}}};
 
 use anyhow::Result;
