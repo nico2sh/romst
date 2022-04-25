@@ -210,9 +210,9 @@ impl DBReader{
     }
 
     fn find_sets_for_roms(&self, db_roms: Vec<DbDataEntry<DataFile>>, rom_mode: RomsetMode) -> Result<RomSearch> {
-        let mut params: Vec<&dyn ToSql> = vec![];
+        let mut params = vec![];
         let mut ids_cond = String::new();
-        let mut i = 0;
+        let mut i: u32 = 0;
         db_roms.iter().for_each(|db_rom| {
             if i != 0 {
                 ids_cond.push_str(", ");
@@ -228,7 +228,7 @@ impl DBReader{
 
         type QueryResult = (Game, DbDataEntry<DataFile>, Option<String>);
         let mut roms_stmt = self.conn.prepare(&query)?;
-        let roms_rows = roms_stmt.query_map::<QueryResult, _, _>(params, |row| {
+        let roms_rows = roms_stmt.query_map::<QueryResult, _, _>(rusqlite::params_from_iter(params.iter()), |row| {
             process_games_rom_row(row)
         })?.filter_map(|result| {
             // We filter the erros
@@ -328,7 +328,7 @@ impl DBReader{
                             &statement_where.join(" AND ") + ";";
                         
                         let mut rom_stmt = conn.prepare_cached(&statement)?;
-                        let query_rom_result: Vec<u32> = rom_stmt.query_map_named(params.as_slice(), |row| {
+                        let query_rom_result: Vec<u32> = rom_stmt.query_map(params.as_slice(), |row| {
                             Ok(row.get(0)?)
                         })?.filter_map(|row| row.ok() ).collect();
 
@@ -385,7 +385,7 @@ impl DBReader{
                             &statement_where.join(" AND ") + ";";
                         
                         let mut rom_stmt = conn.prepare_cached(&statement)?;
-                        let query_rom_result: Vec<u32> = rom_stmt.query_map_named(params.as_slice(), |row| {
+                        let query_rom_result: Vec<u32> = rom_stmt.query_map(params.as_slice(), |row| {
                             Ok(row.get(0)?)
                         })?.filter_map(|row| row.ok() ).collect();
 

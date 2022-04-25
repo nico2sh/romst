@@ -34,7 +34,7 @@ impl DatImporterReporter for DatImporterReporterSysOut {
         self.entries += new_entries;
 
         self.progress_bar.set_position(current_bytes);
-        self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
+        self.progress_bar.set_message(format!("Entries: #{}", self.entries));
     }
 
     fn start_finish(&self) {
@@ -43,8 +43,8 @@ impl DatImporterReporter for DatImporterReporterSysOut {
     }
 
     fn finish(&self) {
-        self.progress_bar.set_message(&format!("Entries: #{}", self.entries));
-        self.progress_bar.finish_with_message(&format!("Total Entries #{}", self.entries));
+        self.progress_bar.set_message(format!("Entries: #{}", self.entries));
+        self.progress_bar.finish_with_message(format!("Total Entries #{}", self.entries));
     }
 }
 
@@ -70,8 +70,8 @@ impl ReportReporterSysOut {
     }
 
     fn update_info_numbers(&mut self) {
-        self.progress_bar.set_prefix(&format!("P: Processed / D: Directories / I: Ignored | {}", self.current_file));
-        self.progress_bar.set_message(&format!("P: {} / D: {} / I: {} / E: {}", self.new_files, self.directories, self.ignored, self.error));
+        self.progress_bar.set_prefix(format!("P: Processed / D: Directories / I: Ignored | {}", self.current_file));
+        self.progress_bar.set_message(format!("P: {} / D: {} / I: {} / E: {}", self.new_files, self.directories, self.ignored, self.error));
     }
 }
 
@@ -116,6 +116,6 @@ impl ReportReporter for ReportReporterSysOut {
 
     fn finish(&mut self) {
         self.progress_bar.set_prefix("P: Processed / D: Directories / I: Ignored / E: Errors | FINISHED");
-        self.progress_bar.finish_with_message(&format!("P: {} / D: {} / I: {} / E: {}", self.new_files, self.directories, self.ignored, self.error));
+        self.progress_bar.finish_with_message(format!("P: {} / D: {} / I: {} / E: {}", self.new_files, self.directories, self.ignored, self.error));
     }
 }
